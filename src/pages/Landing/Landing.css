@@ -39,6 +39,97 @@
   justify-content: center;
 }
 
+.status {
+  margin-top: 1.25rem;
+  padding: 0.9rem 1.2rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.status-error {
+  background: #ffe7e7;
+  color: #a40000;
+  border: 1px solid #f0b6b6;
+}
+
+.room-card {
+  margin-top: 2.5rem;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 2rem;
+  padding: 2rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  background: #fafafa;
+  width: min(900px, 100%);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
+}
+
+.room-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-align: left;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem;
+  border: 1px dashed #d0d0d0;
+  border-radius: 12px;
+}
+
+.meta-label {
+  font-size: 0.9rem;
+  color: #666666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.meta-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.meta-value.code {
+  letter-spacing: 2px;
+}
+
+.meta-link {
+  color: #000000;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.meta-link:hover {
+  text-decoration: underline;
+}
+
+.qr-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.qr-image {
+  width: 180px;
+  height: 180px;
+}
+
+.qr-caption {
+  font-size: 0.95rem;
+  color: #444444;
+}
+
 .about {
   padding: 4rem 3rem;
   background: #f9f9f9;
@@ -68,6 +159,11 @@
 
   .hero-subtitle {
     font-size: 1rem;
+  }
+
+  .room-card {
+    grid-template-columns: 1fr;
+    padding: 1.5rem;
   }
 
   .about {

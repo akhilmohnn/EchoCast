@@ -1,9 +1,14 @@
 import './Button.css'
 
-function Button({ children, variant = 'primary', onClick }) {
+function Button({ children, variant = 'primary', loading = false, ...props }) {
   return (
-    <button className={`btn btn-${variant}`} onClick={onClick}>
-      {children}
+    <button
+      className={`btn btn-${variant}`}
+      disabled={loading || props.disabled}
+      aria-busy={loading}
+      {...props}
+    >
+      {loading ? 'Please wait...' : children}
     </button>
   )
 }

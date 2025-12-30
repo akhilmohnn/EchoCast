@@ -10,6 +10,11 @@
   letter-spacing: 1px;
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .btn-primary {
   background: #000000;
   color: #ffffff;
