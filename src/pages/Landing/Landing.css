@@ -52,6 +52,12 @@
   border: 1px solid #f0b6b6;
 }
 
+.status-success {
+  background: #e7ffef;
+  color: #0f7b2d;
+  border: 1px solid #b6f0c5;
+}
+
 .room-card {
   margin-top: 2.5rem;
   display: grid;
