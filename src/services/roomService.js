@@ -132,7 +132,7 @@ export async function createRoom(userName) {
 
   await persistRoom(roomId, roomCode, creatorId)
 
-  const user = { id: creatorId, name: userName || `User-${creatorId.slice(-4)}` }
+  const user = { id: creatorId, name: userName || 'Admin' }
   await addParticipant(roomId, user)
 
   const joinUrl = `${window.location.origin}/join?room=${roomId}&code=${roomCode}`
