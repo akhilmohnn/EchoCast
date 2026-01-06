@@ -80,6 +80,17 @@ function RoomConnectedPage() {
       <main className="hero">
         <h1 className="hero-title">Room connected</h1>
         <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
+      
+      {isCreator && (
+                      <div style={{ marginTop: '1.5rem', width: '20%', display: 'flex', flexDirection: 'row', gap: '0.8rem' }}>
+                        <Button variant="primary" style={{ flex: 1 }} onClick={() => console.log('Upload Audio')}>
+                          Upload Audio
+                        </Button>
+                        <Button variant="primary" style={{ flex: 1 }} onClick={() => console.log('Upload Video')}>
+                          Upload Video
+                        </Button>
+                      </div>
+                    )}
 
         {room ? (
           <div className="room-content-wrapper">
@@ -100,6 +111,9 @@ function RoomConnectedPage() {
                 <img src={room.qrDataUrl} alt="Room QR code" className="qr-image" />
                 <p className="qr-caption">Scan to join the room</p>
               </div>
+
+
+
               <div style={{ marginTop: '1rem', width: '100%' }}>
                   <Button variant="secondary" onClick={handleLeave} style={{ width: '100%', borderColor: '#ff4d4f', color: '#ff4d4f' }}>
                     Leave Room
