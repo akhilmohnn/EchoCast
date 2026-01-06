@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Header, Button, Footer } from '../../components'
 import { getParticipants, removeParticipant, getCurrentUserId } from '../../services/roomService'
@@ -12,6 +12,8 @@ function RoomConnectedPage() {
   
   const [participants, setParticipants] = useState([])
   const [currentUserId, setCurrentUserId] = useState('')
+  const [audioSrc, setAudioSrc] = useState(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     setCurrentUserId(getCurrentUserId())
@@ -72,6 +74,19 @@ function RoomConnectedPage() {
   }
 
   const isCreator = room?.creatorId === currentUserId
+  
+  const handleAudioUploadClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (audioSrc) URL.revokeObjectURL(audioSrc)
+      const url = URL.createObjectURL(file)
+      setAudioSrc(url)
+    }
+  }
 
   return (
     <div className="landing">
@@ -81,17 +96,6 @@ function RoomConnectedPage() {
         <h1 className="hero-title">Room connected</h1>
         <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
       
-      {isCreator && (
-                      <div style={{ marginTop: '1.5rem', width: '20%', display: 'flex', flexDirection: 'row', gap: '0.8rem' }}>
-                        <Button variant="primary" style={{ flex: 1 }} onClick={() => console.log('Upload Audio')}>
-                          Upload Audio
-                        </Button>
-                        <Button variant="primary" style={{ flex: 1 }} onClick={() => console.log('Upload Video')}>
-                          Upload Video
-                        </Button>
-                      </div>
-                    )}
-
         {room ? (
           <div className="room-content-wrapper">
              {/* Left side: Room info */}
@@ -112,7 +116,28 @@ function RoomConnectedPage() {
                 <p className="qr-caption">Scan to join the room</p>
               </div>
 
-
+              {isCreator && (
+                <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                   <input
+                    type="file"
+                    accept="audio/mp3,audio/*"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                  />
+                  <Button variant="primary" style={{ width: '100%' }} onClick={handleAudioUploadClick}>
+                    Upload Audio
+                  </Button>
+                  {audioSrc && (
+                    <div className="audio-player-wrapper" style={{ width: '100%', marginTop: '0.5rem' }}>
+                       <audio controls src={audioSrc} style={{ width: '100%' }} />
+                    </div>
+                  )}
+                  <Button variant="primary" style={{ width: '100%' }} onClick={() => console.log('Upload Video')}>
+                    Upload Video
+                  </Button>
+                </div>
+              )}
 
               <div style={{ marginTop: '1rem', width: '100%' }}>
                   <Button variant="secondary" onClick={handleLeave} style={{ width: '100%', borderColor: '#ff4d4f', color: '#ff4d4f' }}>
