@@ -5,17 +5,24 @@ import '../Landing/Landing.css'
 import { createRoom } from '../../services/roomService'
 
 function CreateRoomPage() {
+  const [userName, setUserName] = useState('')
   const [room, setRoom] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
-  const generateRoom = async () => {
+  const generateRoom = async (e) => {
+    if (e) e.preventDefault()
+    if (!userName.trim()) {
+      setError('Please enter your name.')
+      return
+    }
+
     setLoading(true)
     setError('')
     try {
-      const data = await createRoom()
-      setRoom(data)
+      const data = await createRoom(userName)
+      navigate('/connected', { state: { room: data } })
     } catch (err) {
       setRoom(null)
       setError(err.message || 'Unable to create room right now.')
@@ -24,9 +31,10 @@ function CreateRoomPage() {
     }
   }
 
-  useEffect(() => {
-    generateRoom()
-  }, [])
+  // Removed useEffect to auto-generate, user must input name first
+  // useEffect(() => {
+  //   generateRoom()
+  // }, [])
 
   return (
     <div className="landing">
@@ -36,18 +44,31 @@ function CreateRoomPage() {
         <h1 className="hero-title">Create Room</h1>
         <p className="hero-subtitle">Generate a room ID, code, and QR for quick sharing.</p>
 
-        <div className="button-group">
-          <Button variant="primary" onClick={generateRoom} loading={loading}>
-            Generate New Room
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => navigate('/join')}
-            disabled={loading}
-          >
-            Go to Join
-          </Button>
-        </div>
+        <form onSubmit={generateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+           <input
+            className="text-input"
+            type="text"
+            placeholder="Your Name"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            required
+            style={{ minWidth: '300px' }}
+          />
+
+          <div className="button-group">
+            <Button variant="primary" type="submit" loading={loading}>
+              Generate New Room
+            </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => navigate('/join')}
+              disabled={loading}
+            >
+              Go to Join
+            </Button>
+          </div>
+        </form>
 
         {error && <div className="status status-error">{error}</div>}
 

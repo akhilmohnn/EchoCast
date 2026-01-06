@@ -9,6 +9,7 @@ function JoinRoomPage() {
   const [searchParams] = useSearchParams()
   const [roomId, setRoomId] = useState(searchParams.get('room') || '')
   const [roomCode, setRoomCode] = useState(searchParams.get('code') || '')
+  const [userName, setUserName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [room, setRoom] = useState(null)
@@ -20,7 +21,7 @@ function JoinRoomPage() {
     setError('')
     setRoom(null)
     try {
-      const data = await joinRoom(roomId.trim(), roomCode.trim())
+      const data = await joinRoom(roomId.trim(), roomCode.trim(), userName.trim())
       setRoom(data)
       navigate('/connected', { state: { room: data } })
     } catch (err) {
@@ -39,6 +40,15 @@ function JoinRoomPage() {
         <p className="hero-subtitle">Enter the room ID and join code to connect.</p>
 
         <form className="join-form" onSubmit={handleSubmit}>
+          <input
+            className="text-input"
+            type="text"
+            name="userName"
+            placeholder="Your Name"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            required
+          />
           <input
             className="text-input"
             type="text"
