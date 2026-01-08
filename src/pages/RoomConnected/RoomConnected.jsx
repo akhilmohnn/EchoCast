@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Header, Button, Footer } from '../../components'
-import { getParticipants, removeParticipant, getCurrentUserId } from '../../services/roomService'
+import { getParticipants, removeParticipant, getCurrentUserId, updateAudioState, getAudioState, uploadAudioChunked, downloadAudioChunked } from '../../services/roomService'
 import '../Landing/Landing.css'
 import './RoomConnected.css'
+import './Toggle.css'
 
 function RoomConnectedPage() {
   const { state } = useLocation()
@@ -13,7 +14,14 @@ function RoomConnectedPage() {
   const [participants, setParticipants] = useState([])
   const [currentUserId, setCurrentUserId] = useState('')
   const [audioSrc, setAudioSrc] = useState(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentFileName, setCurrentFileName] = useState('')
+  const [currentFileVersion, setCurrentFileVersion] = useState(0)
+  const [participantAudioEnabled, setParticipantAudioEnabled] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+
   const fileInputRef = useRef(null)
+  const audioRef = useRef(null)
 
   useEffect(() => {
     setCurrentUserId(getCurrentUserId())
@@ -47,6 +55,79 @@ function RoomConnectedPage() {
     const interval = setInterval(fetchParticipants, 3000)
     return () => clearInterval(interval)
   }, [room?.roomId])
+
+  // Audio Sync Logic (Polling for participants, Event pushing for master)
+  useEffect(() => {
+    if (!room?.roomId) return
+    const isCreator = room?.creatorId === currentUserId
+
+    // Ref to track if we are currently handling a scheduled sync to avoid loops
+    let isSyncing = false
+
+    const syncAudio = async () => {
+      if (isCreator) return // Master pushes state, doesn't poll it
+
+      try {
+        const audioState = await getAudioState(room.roomId)
+        if (!audioState) return
+        
+        // Update file if changed via version check
+        if (audioState.fileVersion && audioState.fileVersion !== currentFileVersion && !isDownloading) {
+             setIsDownloading(true)
+             // Download chunked file
+             try {
+                const dataUrl = await downloadAudioChunked(room.roomId)
+                if (dataUrl) {
+                    setAudioSrc(dataUrl)
+                    setCurrentFileName(audioState.fileName)
+                    setCurrentFileVersion(audioState.fileVersion)
+                }
+             } catch (e) {
+                 console.error('Download failed', e)
+             } finally {
+                 setIsDownloading(false)
+             }
+        }
+
+        if (audioRef.current && audioSrc) {
+          const audio = audioRef.current
+          isSyncing = true
+          
+          // Sync Play/Pause
+          if (audioState.status === 'playing' && audio.paused) {
+             if (participantAudioEnabled) {
+                 await audio.play().catch(e => console.warn('Autoplay blocked', e))
+             }
+          } else if (audioState.status === 'paused' && !audio.paused) {
+             audio.pause()
+          }
+
+          // Sync Time (Drift Correction)
+          const serverTime = audioState.timestamp
+          const clientTime = Date.now()
+          const latency = (clientTime - serverTime) / 1000 
+          // If status is playing, expected time is position + latency
+          // If status is paused, expected time is position
+          let expectedTime = audioState.position
+          if (audioState.status === 'playing') {
+             expectedTime += latency
+          }
+
+          if (Math.abs(audio.currentTime - expectedTime) > 0.5) {
+             // Only seek if drift > 0.5s to avoid stutter
+             audio.currentTime = expectedTime
+          }
+           isSyncing = false
+        }
+
+      } catch (err) {
+        console.error('Audio sync error', err)
+      }
+    }
+  
+    const interval = setInterval(syncAudio, 1000) // Poll every second for audio
+    return () => clearInterval(interval)
+  }, [room?.roomId, currentUserId, audioSrc, participantAudioEnabled, currentFileVersion, isDownloading])
 
   const handleLeave = async () => {
      try {
@@ -83,8 +164,73 @@ function RoomConnectedPage() {
     const file = e.target.files?.[0]
     if (file) {
       if (audioSrc) URL.revokeObjectURL(audioSrc)
-      const url = URL.createObjectURL(file)
-      setAudioSrc(url)
+      
+      const reader = new FileReader()
+      reader.onload = async (evt) => {
+        const dataUrl = evt.target.result
+        setAudioSrc(dataUrl)
+        setCurrentFileName(file.name)
+        
+        try {
+            // Upload data chunked
+            await uploadAudioChunked(room.roomId, dataUrl)
+
+            const newVersion = Date.now()
+            setCurrentFileVersion(newVersion)
+
+            // Initial sync state update with versioning
+            await updateAudioState(room.roomId, {
+                // src: dataUrl, // We no longer send the huge src in state
+                fileVersion: newVersion, // New version ID
+                fileName: file.name,
+                status: 'paused',
+                position: 0,
+                timestamp: Date.now()
+            })
+        } catch (err) {
+            console.error('Upload failed', err)
+            alert('Failed to upload audio file')
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+  
+  const handleMasterPlay = () => {
+    if (audioRef.current) {
+      updateAudioState(room.roomId, {
+        fileVersion: currentFileVersion, // maintain current version
+        fileName: currentFileName,
+        status: 'playing',
+        position: audioRef.current.currentTime,
+        timestamp: Date.now()
+      })
+    }
+  }
+
+  const handleMasterPause = () => {
+    if (audioRef.current) {
+      updateAudioState(room.roomId, {
+        fileVersion: currentFileVersion, // maintain current version
+        fileName: currentFileName,
+        status: 'paused',
+        position: audioRef.current.currentTime,
+        timestamp: Date.now()
+      })
+    }
+  }
+
+  const handleMasterSeek = () => {
+    if (audioRef.current) {
+        // Determine status (playing or paused)
+        const status = audioRef.current.paused ? 'paused' : 'playing'
+        updateAudioState(room.roomId, {
+          fileVersion: currentFileVersion, // maintain current version
+          fileName: currentFileName,
+          status: status,
+          position: audioRef.current.currentTime,
+          timestamp: Date.now()
+        })
     }
   }
 
@@ -116,6 +262,7 @@ function RoomConnectedPage() {
                 <p className="qr-caption">Scan to join the room</p>
               </div>
 
+              {/* Master Controls */}
               {isCreator && (
                 <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                    <input
@@ -130,13 +277,58 @@ function RoomConnectedPage() {
                   </Button>
                   {audioSrc && (
                     <div className="audio-player-wrapper" style={{ width: '100%', marginTop: '0.5rem' }}>
-                       <audio controls src={audioSrc} style={{ width: '100%' }} />
+                       <p className="file-name" style={{fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 'bold'}}>
+                          Playing: {currentFileName}
+                       </p>
+                       <audio 
+                         ref={audioRef}
+                         controls 
+                         src={audioSrc} 
+                         style={{ width: '100%' }} 
+                         onPlay={handleMasterPlay}
+                         onPause={handleMasterPause}
+                         onSeeked={handleMasterSeek}
+                       />
                     </div>
                   )}
                   <Button variant="primary" style={{ width: '100%' }} onClick={() => console.log('Upload Video')}>
                     Upload Video
                   </Button>
                 </div>
+              )}
+              
+              {/* Participant View */}
+              {!isCreator && (
+                 <div style={{ marginTop: '1.5rem', width: '100%', padding: '1rem', background: '#f0f0f0', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <span style={{ fontWeight: 'bold' }}>Audio Sync</span>
+                      <label className="switch">
+                        <input 
+                          type="checkbox" 
+                          checked={participantAudioEnabled} 
+                          onChange={(e) => setParticipantAudioEnabled(e.target.checked)} 
+                        />
+                        <span className="slider round"></span>
+                      </label>
+                    </div>
+                    
+                    {currentFileName ? (
+                        <div style={{textAlign: 'center'}}>
+                            <p style={{marginBottom: '0.5rem'}}>Now Playing:</p>
+                            <p style={{fontWeight: 'bold', color: '#0070f3'}}>{currentFileName}</p>
+                            
+                            {/* Hidden audio for participant, or simplified without controls if preferred, but user said "No controls on participant system" */}
+                            <audio 
+                                ref={audioRef}
+                                src={audioSrc}
+                                muted={!participantAudioEnabled} // Double safety
+                            />
+                             {!participantAudioEnabled && <p style={{fontSize:'0.8rem', color: '#666', marginTop:'0.5rem'}}>Enable toggle to hear sound</p>}
+                        </div>
+                    ) : (
+                        <p style={{ fontStyle: 'italic', color: '#666', textAlign: 'center' }}>Waiting for host to play audio...</p>
+                    )}
+                 </div>
               )}
 
               <div style={{ marginTop: '1rem', width: '100%' }}>

@@ -5,6 +5,9 @@ const REDIS_TOKEN = import.meta.env.VITE_REDIS_REST_TOKEN
 const ROOM_TTL_SECONDS = 900 // 15 minutes
 const ROOM_KEY_PREFIX = 'room:'
 const PARTICIPANTS_KEY_PREFIX = 'room:participants:'
+const AUDIO_STATE_KEY_PREFIX = 'room:audio:'
+const AUDIO_DATA_KEY_PREFIX = 'room:audio:data:'
+const CHUNK_SIZE = 500 * 1024 // 500KB
 
 function ensureRedisConfig() {
   if (!REDIS_URL || !REDIS_TOKEN) {
@@ -34,6 +37,14 @@ function getRoomKey(roomId) {
 
 function getParticipantsKey(roomId) {
   return encodeURIComponent(`${PARTICIPANTS_KEY_PREFIX}${roomId}`)
+}
+
+function getAudioStateKey(roomId) {
+  return encodeURIComponent(`${AUDIO_STATE_KEY_PREFIX}${roomId}`)
+}
+
+function getAudioDataKey(roomId) {
+  return encodeURIComponent(`${AUDIO_DATA_KEY_PREFIX}${roomId}`)
 }
 
 async function persistRoom(roomId, roomCode, creatorId) {
@@ -219,4 +230,126 @@ export async function joinRoom(roomId, roomCode, userName) {
     creatorId: record.creatorId,
     isCreator: record.creatorId === userId
   }
+}
+
+export async function updateAudioState(roomId, state) {
+  ensureRedisConfig()
+  const baseUrl = getRedisBaseUrl()
+  const key = getAudioStateKey(roomId)
+  const payload = encodeURIComponent(JSON.stringify(state))
+  
+  // Set audio state with same expiry as room (roughly)
+  const url = `${baseUrl}/setex/${key}/${ROOM_TTL_SECONDS}/${payload}`
+
+  await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+  })
+}
+
+export async function getAudioState(roomId) {
+  ensureRedisConfig()
+  const baseUrl = getRedisBaseUrl()
+  const key = getAudioStateKey(roomId)
+  const url = `${baseUrl}/get/${key}`
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+  })
+
+  if (!response.ok) return null
+
+  const json = await response.json()
+  const raw = json?.result
+  if (!raw || raw === 'null') return null
+
+  try {
+    return JSON.parse(decodeURIComponent(raw))
+  } catch (err) {
+    console.error('Failed to parse audio state', err)
+    return null
+  }
+}
+
+export async function uploadAudioChunked(roomId, fileDataUrl) {
+  ensureRedisConfig()
+  const baseUrl = getRedisBaseUrl()
+  const keyBase = getAudioDataKey(roomId)
+  
+  // Calculate chunks
+  const totalLength = fileDataUrl.length
+  const totalChunks = Math.ceil(totalLength / CHUNK_SIZE)
+
+  // Upload chunks in parallel
+  const promises = []
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE
+    const end = Math.min(start + CHUNK_SIZE, totalLength)
+    const chunk = fileDataUrl.substring(start, end)
+    
+    const key = `${keyBase}:${i}`
+    const payload = encodeURIComponent(chunk)
+    // Use SETEX to expire same as room
+    const url = `${baseUrl}/setex/${key}/${ROOM_TTL_SECONDS}/${payload}`
+    
+    promises.push(fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    }))
+  }
+
+  await Promise.all(promises)
+  
+  // Store meta about data so we know how many chunks to fetch
+  const metaKey = `${keyBase}:meta`
+  const metaPayload = encodeURIComponent(JSON.stringify({ totalChunks, totalLength }))
+  await fetch(`${baseUrl}/setex/${metaKey}/${ROOM_TTL_SECONDS}/${metaPayload}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+  })
+}
+
+export async function downloadAudioChunked(roomId) {
+  ensureRedisConfig()
+  const baseUrl = getRedisBaseUrl()
+  const keyBase = getAudioDataKey(roomId)
+  
+  // Get Meta
+  const metaKey = `${keyBase}:meta`
+  const metaRes = await fetch(`${baseUrl}/get/${metaKey}`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+  })
+  if (!metaRes.ok) return null
+  const metaJson = await metaRes.json()
+  if (!metaJson.result) return null
+  
+  let meta
+  try {
+     meta = JSON.parse(decodeURIComponent(metaJson.result))
+  } catch (e) {
+     return null
+  }
+  
+  const { totalChunks } = meta
+  
+  // Fetch all chunks
+  const promises = []
+  for (let i = 0; i < totalChunks; i++) {
+      const key = `${keyBase}:${i}`
+      promises.push(fetch(`${baseUrl}/get/${key}`, {
+          headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+      }).then(r => r.json()))
+  }
+  
+  const results = await Promise.all(promises)
+  
+  // Reassemble
+  let fullDataUrl = ''
+  for (const res of results) {
+      if (res.result) {
+          fullDataUrl += decodeURIComponent(res.result)
+      }
+  }
+  
+  return fullDataUrl
 }
