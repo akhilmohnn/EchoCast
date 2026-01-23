@@ -1,3 +1,32 @@
+A web-based live audio relay system for browser video playback. Stream synchronized audio from your computer to other devices via simple room codes.
+
+✨ Features
+Live Relay: Synchronized audio streaming.
+
+Easy Access: Room creation with QR code support.
+
+Optimized: Chunked upload functionality for stability.
+
+Vite Powered: Fast HMR and network-exposed dev server.
+
+🚀 Quick Start
+Bash
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+🛠️ Stack
+Core: React + Vite
+
+Deployment: Vercel
+
+Language: JavaScript (ESLint configured)
+
+🌐 Live Demo
+Visit echo-cast.vercel.app
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
