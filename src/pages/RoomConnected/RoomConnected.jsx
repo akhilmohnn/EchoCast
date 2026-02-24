@@ -348,7 +348,7 @@ function RoomConnectedPage() {
 
               {/* Master Controls */}
               {isCreator && (
-                <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <div className="master-controls">
                   <input
                     type="file"
                     accept="audio/mp3,audio/*"
@@ -367,15 +367,12 @@ function RoomConnectedPage() {
                     Upload Audio
                   </Button>
                   {(localMediaSrc || audioSrc) && mediaType === 'audio' && (
-                    <div className="audio-player-wrapper" style={{ width: '100%', marginTop: '0.5rem' }}>
-                      <p className="file-name" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                        Playing: {currentFileName}
-                      </p>
+                    <div className="audio-player-wrapper">
+                      <p className="file-name">Playing: {currentFileName}</p>
                       <audio
                         ref={audioRef}
                         controls
                         src={localMediaSrc || audioSrc}
-                        style={{ width: '100%' }}
                         onPlay={handleMasterPlay}
                         onPause={handleMasterPause}
                         onSeeked={handleMasterSeek}
@@ -396,9 +393,9 @@ function RoomConnectedPage() {
 
               {/* Participant View */}
               {!isCreator && (
-                <div style={{ marginTop: '1.5rem', width: '100%', padding: '1rem', background: '#f0f0f0', borderRadius: '8px' }}>
+                <div className="participant-sync-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <span style={{ fontWeight: 'bold' }}>Audio Sync</span>
+                    <span style={{ fontWeight: '700', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717a' }}>Audio Sync</span>
                     <label className="switch">
                       <input
                         type="checkbox"
@@ -411,25 +408,23 @@ function RoomConnectedPage() {
 
                   {currentFileName ? (
                     <div style={{ textAlign: 'center' }}>
-                      <p style={{ marginBottom: '0.5rem' }}>Now Playing:</p>
-                      <p style={{ fontWeight: 'bold', color: '#0070f3' }}>{currentFileName}</p>
-
-                      {/* Hidden audio for participant, or simplified without controls if preferred, but user said "No controls on participant system" */}
+                      <p style={{ marginBottom: '0.4rem', color: '#71717a', fontSize: '0.85rem' }}>Now Playing:</p>
+                      <p style={{ fontWeight: '700', color: '#a78bfa', fontSize: '0.95rem' }}>{currentFileName}</p>
                       <audio
                         ref={audioRef}
                         src={audioSrc}
-                        muted={!participantAudioEnabled} // Double safety
+                        muted={!participantAudioEnabled}
                       />
-                      {!participantAudioEnabled && <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>Enable toggle to hear sound</p>}
+                      {!participantAudioEnabled && <p style={{ fontSize: '0.78rem', color: '#52525b', marginTop: '0.6rem' }}>Enable toggle to hear sound</p>}
                     </div>
                   ) : (
-                    <p style={{ fontStyle: 'italic', color: '#666', textAlign: 'center' }}>Waiting for host to play audio...</p>
+                    <p style={{ fontStyle: 'italic', color: '#3f3f46', textAlign: 'center', fontSize: '0.88rem' }}>Waiting for host to play audio...</p>
                   )}
                 </div>
               )}
 
               <div style={{ marginTop: '1rem', width: '100%' }}>
-                <Button variant="secondary" onClick={handleLeave} style={{ width: '100%', borderColor: '#ff4d4f', color: '#ff4d4f' }}>
+                <Button variant="secondary" onClick={handleLeave} style={{ width: '100%', borderColor: 'rgba(248,113,113,0.35)', color: '#f87171', background: 'rgba(248,113,113,0.08)' }}>
                   Leave Room
                 </Button>
               </div>
