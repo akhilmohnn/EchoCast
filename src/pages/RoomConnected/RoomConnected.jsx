@@ -189,6 +189,8 @@ function RoomConnectedPage() {
 
   const handleFileChange = async (e, type) => {
     const file = e.target.files?.[0]
+    // Reset the input so the same or a different file can be selected again later
+    e.target.value = ''
     if (!file) return
 
     if (localMediaSrc) URL.revokeObjectURL(localMediaSrc)
