@@ -320,7 +320,7 @@ function RoomConnectedPage() {
         <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
 
         {isCreator && (
-          <button className="go-live-btn">
+          <button className="go-live-btn" onClick={() => navigate('/golive', { state: room })}>
             <span className="go-live-dot" />
             Go Live
           </button>

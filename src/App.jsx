@@ -1,5 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
-import { Landing, CreateRoomPage, JoinRoomPage, RoomConnectedPage } from './pages'
+import { Landing, CreateRoomPage, JoinRoomPage, RoomConnectedPage, GoLivePage } from './pages'
 import './App.css'
 
 function App() {
@@ -9,6 +9,7 @@ function App() {
       <Route path="/create" element={<CreateRoomPage />} />
       <Route path="/join" element={<JoinRoomPage />} />
       <Route path="/connected" element={<RoomConnectedPage />} />
+      <Route path="/golive" element={<GoLivePage />} />
       <Route path="*" element={<Landing />} />
     </Routes>
   )
