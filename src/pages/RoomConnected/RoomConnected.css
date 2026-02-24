@@ -16,7 +16,7 @@
   min-width: 280px;
   border: 1px solid #e9ecef;
   text-align: left;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
 }
 
 .participants-title {
@@ -90,6 +90,7 @@
     flex-direction: column;
     align-items: center;
   }
+
   .participants-panel {
     width: 100%;
     max-width: 400px;
@@ -117,7 +118,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
 }
 
 .video-popup-header {
@@ -157,4 +158,92 @@
   max-height: 80vh;
   background: #000;
   outline: none;
+}
+
+/* ── Go Live Button ─────────────────────────────────────────── */
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  70% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-dot {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.go-live-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 2rem;
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, #ff3c3c 0%, #ff0080 100%);
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow:
+    0 4px 18px rgba(255, 0, 80, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.go-live-btn:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow:
+    0 8px 28px rgba(255, 0, 80, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.go-live-btn:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow:
+    0 3px 12px rgba(255, 0, 80, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Solid white dot */
+.go-live-dot {
+  position: relative;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+/* Expanding ring around the dot */
+.go-live-dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  animation: pulse-ring 1.4s ease-out infinite;
 }

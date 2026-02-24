@@ -319,6 +319,13 @@ function RoomConnectedPage() {
         <h1 className="hero-title">Room connected</h1>
         <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
 
+        {isCreator && (
+          <button className="go-live-btn">
+            <span className="go-live-dot" />
+            Go Live
+          </button>
+        )}
+
         {room ? (
           <div className="room-content-wrapper">
             {/* Left side: Room info */}
