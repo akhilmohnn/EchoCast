@@ -74,7 +74,7 @@
     z-index: 0;
 }
 
-/* ── Content wrapper ── */
+/* ── Content wrapper (single centred column — original) ── */
 .gl-content {
     position: relative;
     z-index: 1;
@@ -95,6 +95,12 @@
     align-items: center;
 }
 
+.gl-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 .gl-logo {
     display: flex;
     align-items: center;
@@ -112,6 +118,37 @@
     border-radius: 50%;
     background: linear-gradient(135deg, #7c3aed, #a855f7);
     box-shadow: 0 0 8px rgba(124, 58, 237, 0.8);
+}
+
+/* ── Invite button ── */
+.gl-invite-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 50px;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    background: rgba(124, 58, 237, 0.12);
+    color: #a78bfa;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    font-family: inherit;
+}
+
+.gl-invite-btn:hover {
+    background: rgba(124, 58, 237, 0.22);
+    border-color: rgba(167, 139, 250, 0.55);
+    transform: translateY(-1px);
+}
+
+.gl-invite-icon {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
 }
 
 /* ── Standby / Live badge ── */
@@ -337,33 +374,6 @@
     color: #fca5a5;
 }
 
-/* ── Room code pill ── */
-.gl-room-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 50px;
-    padding: 0.55rem 1.25rem;
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(8px);
-}
-
-.gl-room-pill-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #52525b;
-}
-
-.gl-room-pill-code {
-    font-size: 1rem;
-    font-weight: 800;
-    letter-spacing: 0.2em;
-    color: #a78bfa;
-}
-
 /* ── Action buttons row ── */
 .gl-actions {
     display: flex;
@@ -385,6 +395,7 @@
     letter-spacing: 0.03em;
     cursor: pointer;
     transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+    font-family: inherit;
 }
 
 .gl-action-btn:hover {
@@ -416,6 +427,179 @@
     box-shadow: 0 2px 12px rgba(239, 68, 68, 0.08);
 }
 
+/* ══════════════════════════════════════════════
+   Invite / QR Popup
+   ══════════════════════════════════════════════ */
+
+.gl-popup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    /* pinned to the right */
+    padding: 0;
+    animation: overlay-in 0.2s ease;
+}
+
+@keyframes overlay-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.gl-popup {
+    position: relative;
+    height: 100vh;
+    width: 340px;
+    background: #0d0d12;
+    border-left: 1px solid rgba(167, 139, 250, 0.15);
+    box-shadow: -20px 0 60px rgba(124, 58, 237, 0.18), -2px 0 0 rgba(167, 139, 250, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 2.5rem 2rem;
+    animation: popup-slide-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes popup-slide-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Close ✕ */
+.gl-popup-close {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #71717a;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, background 0.2s;
+}
+
+.gl-popup-close:hover {
+    color: #e4e4e7;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Labels */
+.gl-popup-eyebrow {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #3f3f46;
+    margin: 0;
+}
+
+.gl-popup-title {
+    font-size: 1.6rem;
+    font-weight: 900;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #e4e4e7 30%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+}
+
+/* QR frame */
+.gl-popup-qr-frame {
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-shadow:
+        0 0 0 1px rgba(167, 139, 250, 0.15),
+        0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.gl-popup-qr-img {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    display: block;
+    border-radius: 6px;
+}
+
+.gl-popup-caption {
+    font-size: 0.78rem;
+    color: #52525b;
+    text-align: center;
+    margin: 0;
+}
+
+/* Room code row */
+.gl-popup-code-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: rgba(167, 139, 250, 0.07);
+    border: 1px solid rgba(167, 139, 250, 0.18);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+}
+
+.gl-popup-code-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #52525b;
+}
+
+.gl-popup-code {
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: 0.22em;
+    color: #a78bfa;
+    text-shadow: 0 0 18px rgba(167, 139, 250, 0.5);
+}
+
+/* URL */
+.gl-popup-url {
+    font-size: 0.68rem;
+    color: #3f3f46;
+    word-break: break-all;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    text-align: center;
+    width: 100%;
+}
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
     .gl-stream-btn {
@@ -425,5 +609,11 @@
 
     .gl-hero-title {
         letter-spacing: -1.5px;
+    }
+
+    .gl-popup {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid rgba(167, 139, 250, 0.15);
     }
 }
