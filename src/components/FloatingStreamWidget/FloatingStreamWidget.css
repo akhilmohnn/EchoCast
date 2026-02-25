@@ -1,0 +1,263 @@
+/* ══════════════════════════════════════════════════════════
+   Floating Stream Widget  –  EchoCast
+   A corner pill that floats above every page while live
+   ══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+/* ── Widget shell ── */
+.fsw-widget {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+
+    padding: 1rem 1.1rem 0.85rem;
+    border-radius: 20px;
+    min-width: 130px;
+
+    background: rgba(10, 10, 16, 0.88);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow:
+        0 0 0 1px rgba(167, 139, 250, 0.08),
+        0 8px 40px rgba(0, 0, 0, 0.7),
+        0 0 60px rgba(124, 58, 237, 0.18);
+
+    font-family: 'Inter', sans-serif;
+    user-select: none;
+
+    animation: fsw-slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fsw-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(24px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ── Animated outer glow ring ── */
+.fsw-ring {
+    position: absolute;
+    inset: -3px;
+    border-radius: 22px;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.fsw-ring--live {
+    background: conic-gradient(from 0deg,
+            #dc2626, #f87171, #fca5a5, #dc2626);
+    animation: fsw-spin 3s linear infinite;
+    opacity: 0.55;
+    filter: blur(2px);
+}
+
+.fsw-ring--paused {
+    background: conic-gradient(from 0deg,
+            #3f3f46, #52525b, #71717a, #3f3f46);
+    animation: fsw-spin 6s linear infinite;
+    opacity: 0.4;
+    filter: blur(2px);
+}
+
+@keyframes fsw-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── LIVE / PAUSED badge ── */
+.fsw-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.22rem 0.65rem;
+    border-radius: 50px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    transition: background 0.3s, color 0.3s, border-color 0.3s;
+}
+
+.fsw-badge--live {
+    background: rgba(220, 38, 38, 0.15);
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    color: #f87171;
+}
+
+.fsw-badge--paused {
+    background: rgba(63, 63, 70, 0.35);
+    border: 1px solid rgba(113, 113, 122, 0.3);
+    color: #71717a;
+}
+
+.fsw-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.fsw-badge--live .fsw-badge-dot {
+    animation: fsw-pulse 1.4s ease-out infinite;
+}
+
+@keyframes fsw-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 6px rgba(248, 113, 113, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(248, 113, 113, 0);
+    }
+}
+
+/* ── Timer ── */
+.fsw-timer {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #e4e4e7;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+/* ── Audio wave animation ── */
+.fsw-wave {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 18px;
+}
+
+.fsw-wave-bar {
+    display: block;
+    width: 3px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #f87171, #dc2626);
+    animation: fsw-wave-anim 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes fsw-wave-anim {
+    from {
+        height: 4px;
+        opacity: 0.5;
+    }
+
+    to {
+        height: 18px;
+        opacity: 1;
+    }
+}
+
+/* ── Controls row ── */
+.fsw-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.1rem;
+}
+
+/* ── Icon buttons ── */
+.fsw-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease, background 0.2s;
+    background: rgba(255, 255, 255, 0.06);
+    color: #a1a1aa;
+    flex-shrink: 0;
+}
+
+.fsw-btn:hover {
+    opacity: 0.85;
+    transform: scale(1.1);
+}
+
+.fsw-btn:active {
+    transform: scale(0.92);
+}
+
+/* Pause/Resume */
+.fsw-btn--pause {
+    border-color: rgba(167, 139, 250, 0.25);
+    color: #a78bfa;
+    background: rgba(124, 58, 237, 0.1);
+}
+
+.fsw-btn--resume {
+    border-color: rgba(74, 222, 128, 0.3);
+    color: #4ade80;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+/* GoLive page shortcut */
+.fsw-btn--golive {
+    border-color: rgba(99, 102, 241, 0.28);
+    color: #818cf8;
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* Stop */
+.fsw-btn--stop {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.fsw-btn--stop:hover {
+    background: rgba(239, 68, 68, 0.22);
+}
+
+/* ── Icon svg ── */
+.fsw-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+/* ── Footer label ── */
+.fsw-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #3f3f46;
+    margin-top: -0.1rem;
+}
+
+/* ── Responsive (mobile) ── */
+@media (max-width: 480px) {
+    .fsw-widget {
+        bottom: 1rem;
+        right: 1rem;
+        min-width: 115px;
+        padding: 0.85rem 0.9rem 0.7rem;
+    }
+
+    .fsw-timer {
+        font-size: 1.1rem;
+    }
+}

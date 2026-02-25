@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EchoCast Live Controls</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #070710;
+      color: #e4e4e7;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Ambient orb */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      opacity: 0.3;
+    }
+    .orb1 { width: 300px; height: 300px; background: radial-gradient(circle, #7c3aed, transparent 70%); top: -80px; left: -80px; }
+    .orb2 { width: 260px; height: 260px; background: radial-gradient(circle, #dc2626, transparent 70%); bottom: -60px; right: -60px; opacity: 0.2; }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.6rem 1.8rem 1.4rem;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(167,139,250,0.18);
+      border-radius: 22px;
+      box-shadow: 0 0 0 1px rgba(167,139,250,0.06), 0 12px 50px rgba(0,0,0,0.7);
+      width: 210px;
+    }
+
+    /* Spinning ring behind card */
+    .ring {
+      position: absolute;
+      inset: -3px;
+      border-radius: 24px;
+      z-index: -1;
+      animation: spin 3s linear infinite;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    .ring.live   { background: conic-gradient(from 0deg,#dc2626,#f87171,#fca5a5,#dc2626); opacity: 0.5; filter: blur(2px); }
+    .ring.paused { background: conic-gradient(from 0deg,#3f3f46,#52525b,#71717a,#3f3f46); opacity: 0.3; filter: blur(2px); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Badge */
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.22rem 0.7rem; border-radius: 50px;
+      font-size: 0.6rem; font-weight: 800; letter-spacing: 0.15em;
+      transition: all 0.3s;
+    }
+    .badge.live   { background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.4); color: #f87171; }
+    .badge.paused { background: rgba(63,63,70,0.35);  border: 1px solid rgba(113,113,122,0.3); color: #71717a; }
+    .badge.standby{ background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #52525b; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .badge.live .dot { animation: pulse 1.4s ease-out infinite; }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(248,113,113,.7); }
+      70%  { box-shadow: 0 0 0 6px rgba(248,113,113,0); }
+      100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
+    }
+
+    /* Timer */
+    .timer {
+      font-size: 1.5rem; font-weight: 800; letter-spacing: 0.04em;
+      color: #e4e4e7; font-variant-numeric: tabular-nums; line-height: 1;
+    }
+
+    /* Wave bars */
+    .wave { display: flex; align-items: flex-end; gap: 3px; height: 20px; }
+    .wave span {
+      display: block; width: 3.5px; border-radius: 2px;
+      background: linear-gradient(180deg,#f87171,#dc2626);
+      animation: wave 0.9s ease-in-out infinite alternate;
+    }
+    .wave span:nth-child(1) { animation-delay: 0s; }
+    .wave span:nth-child(2) { animation-delay: 0.12s; }
+    .wave span:nth-child(3) { animation-delay: 0.24s; }
+    .wave span:nth-child(4) { animation-delay: 0.36s; }
+    .wave span:nth-child(5) { animation-delay: 0.48s; }
+    @keyframes wave { from { height: 4px; opacity: .5; } to { height: 20px; opacity: 1; } }
+
+    /* Controls */
+    .controls { display: flex; align-items: center; gap: 0.5rem; }
+    .btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid transparent; cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+      background: rgba(255,255,255,0.07);
+      color: #a1a1aa;
+    }
+    .btn:hover  { transform: scale(1.12); opacity: 0.85; }
+    .btn:active { transform: scale(0.9); }
+    .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .btn-pause  { border-color: rgba(167,139,250,0.3); color: #a78bfa; background: rgba(124,58,237,0.1); }
+    .btn-resume { border-color: rgba(74,222,128,0.3);  color: #4ade80; background: rgba(34,197,94,0.1); }
+    .btn-back   { border-color: rgba(99,102,241,0.3);  color: #818cf8; background: rgba(99,102,241,0.08); }
+    .btn-stop   { border-color: rgba(239,68,68,0.35);  color: #f87171; background: rgba(239,68,68,0.12); }
+    .btn-stop:hover { background: rgba(239,68,68,0.24); }
+
+    /* Label */
+    .label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #3f3f46; }
+
+    /* Status text */
+    .status-text { font-size: 0.72rem; color: #71717a; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+
+  <div class="card">
+    <div class="ring" id="ring"></div>
+
+    <div class="badge standby" id="badge">
+      <span class="dot"></span>
+      <span id="badge-text">STANDBY</span>
+    </div>
+
+    <div class="timer" id="timer">00:00:00</div>
+
+    <div class="wave" id="wave" style="display:none;">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+
+    <div class="controls">
+      <!-- Pause/Resume -->
+      <button class="btn btn-pause" id="btn-pause" title="Pause audio">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="4" width="4" height="16" rx="1"/>
+          <rect x="14" y="4" width="4" height="16" rx="1"/>
+        </svg>
+      </button>
+
+      <!-- Back to GoLive -->
+      <button class="btn btn-back" id="btn-back" title="Back to GoLive page">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+        </svg>
+      </button>
+
+      <!-- Stop -->
+      <button class="btn btn-stop" id="btn-stop" title="Stop streaming">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <rect x="5" y="5" width="14" height="14" rx="2"/>
+        </svg>
+      </button>
+    </div>
+
+    <span class="label">EchoCast Live</span>
+  </div>
+
+  <script>
+    const channel = new BroadcastChannel('echocast_stream')
+
+    let elapsed = 0
+    let paused  = false
+    let streaming = false
+    let timerInterval = null
+
+    const ring      = document.getElementById('ring')
+    const badge     = document.getElementById('badge')
+    const badgeTxt  = document.getElementById('badge-text')
+    const timer     = document.getElementById('timer')
+    const wave      = document.getElementById('wave')
+    const btnPause  = document.getElementById('btn-pause')
+    const btnBack   = document.getElementById('btn-back')
+    const btnStop   = document.getElementById('btn-stop')
+
+    function fmt(s) {
+      const h   = String(Math.floor(s / 3600)).padStart(2, '0')
+      const m   = String(Math.floor((s % 3600) / 60)).padStart(2, '0')
+      const sec = String(s % 60).padStart(2, '0')
+      return `${h}:${m}:${sec}`
+    }
+
+    function setUI(state) {
+      streaming = state.streaming
+      paused    = state.paused
+      elapsed   = state.elapsed || 0
+      timer.textContent = fmt(elapsed)
+
+      // Ring
+      ring.className = 'ring ' + (streaming ? (paused ? 'paused' : 'live') : '')
+
+      // Badge
+      badge.className = 'badge ' + (streaming ? (paused ? 'paused' : 'live') : 'standby')
+      badgeTxt.textContent = streaming ? (paused ? 'PAUSED' : 'LIVE') : 'STANDBY'
+
+      // Wave bars
+      wave.style.display = (streaming && !paused) ? 'flex' : 'none'
+
+      // Pause button icon
+      if (paused) {
+        btnPause.className = 'btn btn-resume'
+        btnPause.title = 'Resume audio'
+        btnPause.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>`
+      } else {
+        btnPause.className = 'btn btn-pause'
+        btnPause.title = 'Pause audio'
+        btnPause.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
+      }
+    }
+
+    // Timer keeping — kept in sync via messages, but also ticks locally
+    function startLocalTimer() {
+      stopLocalTimer()
+      timerInterval = setInterval(() => {
+        if (streaming && !paused) {
+          elapsed++
+          timer.textContent = fmt(elapsed)
+        }
+      }, 1000)
+    }
+    function stopLocalTimer() {
+      clearInterval(timerInterval)
+      timerInterval = null
+    }
+
+    // ── BroadcastChannel listener ──────────────────────────────────
+    channel.addEventListener('message', (e) => {
+      const msg = e.data
+      if (msg.type === 'STATE_UPDATE') {
+        setUI(msg)
+        if (msg.streaming && !msg.paused) startLocalTimer()
+        else stopLocalTimer()
+      }
+    })
+
+    // ── Buttons ────────────────────────────────────────────────────
+    btnPause.addEventListener('click', () => {
+      channel.postMessage({ type: paused ? 'CMD_RESUME' : 'CMD_PAUSE' })
+    })
+
+    btnBack.addEventListener('click', () => {
+      channel.postMessage({ type: 'CMD_FOCUS_GOLIVE' })
+      // Try to focus the opener if same origin
+      if (window.opener && !window.opener.closed) {
+        window.opener.focus()
+      }
+    })
+
+    btnStop.addEventListener('click', () => {
+      channel.postMessage({ type: 'CMD_STOP' })
+    })
+
+    // Ask the main tab to send current state on load
+    channel.postMessage({ type: 'CMD_REQUEST_STATE' })
+
+    // Resize window to fit content tightly
+    window.resizeTo(240, 310)
+  </script>
+</body>
+</html>

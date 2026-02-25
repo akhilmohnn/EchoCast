@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Header, Button, Footer } from '../../components'
 import { getParticipants, removeParticipant, getCurrentUserId, updateAudioState, getAudioState, uploadAudioChunked, downloadAudioChunked } from '../../services/roomService'
+import { useAudioStream } from '../../context/AudioStreamContext'
+import { useLiveAudioPlayer } from '../../hooks/useLiveAudioPlayer'
 import '../Landing/Landing.css'
 import './RoomConnected.css'
 import './Toggle.css'
@@ -24,6 +26,20 @@ function RoomConnectedPage() {
   const [mediaType, setMediaType] = useState('audio') // 'audio' or 'video'
   const [localMediaSrc, setLocalMediaSrc] = useState(null)
   const [isExtracting, setIsExtracting] = useState(false)
+  const [goLiveLoading, setGoLiveLoading] = useState(false)
+  const [goLiveError, setGoLiveError] = useState('')
+
+  const { isStreaming, startStream, stopStream } = useAudioStream()
+
+  // ── Live audio player for slave devices ──────────────────────────
+  // Only activate once we've confirmed the userId and know we're NOT the creator.
+  // currentUserId is '' on first render; don't pass roomId until it's resolved.
+  const isCreatorResolved = currentUserId && room?.creatorId === currentUserId
+  const isSlaveReady = currentUserId && !isCreatorResolved
+  useLiveAudioPlayer(
+    isSlaveReady ? room?.roomId : null,
+    participantAudioEnabled
+  )
 
   const fileInputRef = useRef(null)
   const videoInputRef = useRef(null)
@@ -320,10 +336,43 @@ function RoomConnectedPage() {
         <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
 
         {isCreator && (
-          <button className="go-live-btn" onClick={() => navigate('/golive', { state: room })}>
-            <span className="go-live-dot" />
-            Go Live
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
+            <button
+              className={`go-live-btn${goLiveLoading ? ' go-live-btn--loading' : ''}`}
+              disabled={goLiveLoading}
+              onClick={async () => {
+                setGoLiveError('')
+                // If already streaming, just navigate back to GoLive page
+                if (isStreaming) {
+                  navigate('/golive', { state: room })
+                  return
+                }
+                setGoLiveLoading(true)
+                const ok = await startStream(room?.roomId)
+                setGoLiveLoading(false)
+                if (ok) {
+                  navigate('/golive', { state: room })
+                } else {
+                  setGoLiveError('Could not start stream. Select a tab and make sure to tick "Share tab audio" in the Chrome picker.')
+                }
+              }}
+            >
+              {goLiveLoading ? (
+                <>
+                  <span className="go-live-spinner" />
+                  Requesting audio…
+                </>
+              ) : (
+                <>
+                  <span className="go-live-dot" />
+                  {isStreaming ? 'Back to Studio' : 'Go Live'}
+                </>
+              )}
+            </button>
+            {goLiveError && (
+              <p className="go-live-error">{goLiveError}</p>
+            )}
+          </div>
         )}
 
         {room ? (
@@ -406,19 +455,28 @@ function RoomConnectedPage() {
                     </label>
                   </div>
 
+                  {/* ── Live streaming indicator ── */}
+                  <div className="live-stream-status">
+                    <span className={`live-stream-dot ${participantAudioEnabled ? 'live-stream-dot--active' : ''}`} />
+                    <span style={{ fontSize: '0.78rem', color: participantAudioEnabled ? '#a78bfa' : '#52525b' }}>
+                      {participantAudioEnabled
+                        ? 'Listening for live audio from host…'
+                        : 'Enable toggle to hear live & synced audio'}
+                    </span>
+                  </div>
+
                   {currentFileName ? (
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{ marginBottom: '0.4rem', color: '#71717a', fontSize: '0.85rem' }}>Now Playing:</p>
+                    <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
+                      <p style={{ marginBottom: '0.4rem', color: '#71717a', fontSize: '0.85rem' }}>Synced File:</p>
                       <p style={{ fontWeight: '700', color: '#a78bfa', fontSize: '0.95rem' }}>{currentFileName}</p>
                       <audio
                         ref={audioRef}
                         src={audioSrc}
                         muted={!participantAudioEnabled}
                       />
-                      {!participantAudioEnabled && <p style={{ fontSize: '0.78rem', color: '#52525b', marginTop: '0.6rem' }}>Enable toggle to hear sound</p>}
                     </div>
                   ) : (
-                    <p style={{ fontStyle: 'italic', color: '#3f3f46', textAlign: 'center', fontSize: '0.88rem' }}>Waiting for host to play audio...</p>
+                    <p style={{ fontStyle: 'italic', color: '#3f3f46', textAlign: 'center', fontSize: '0.88rem', marginTop: '0.75rem' }}>Waiting for host to play audio...</p>
                   )}
                 </div>
               )}

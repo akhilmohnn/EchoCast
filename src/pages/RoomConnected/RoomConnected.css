@@ -113,6 +113,46 @@
   border-radius: 14px;
 }
 
+/* ── Live stream status indicator ── */
+.live-stream-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(167, 139, 250, 0.05);
+  border: 1px solid rgba(167, 139, 250, 0.1);
+  border-radius: 8px;
+  margin-bottom: 0.25rem;
+}
+
+.live-stream-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3f3f46;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.live-stream-dot--active {
+  background: #a78bfa;
+  animation: live-dot-pulse 1.6s ease-out infinite;
+}
+
+@keyframes live-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px rgba(167, 139, 250, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0);
+  }
+}
+
 /* ── Master controls panel ── */
 .master-controls {
   margin-top: 1.5rem;
@@ -292,6 +332,45 @@ audio {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.7);
   animation: pulse-ring 1.4s ease-out infinite;
+}
+
+/* Loading state */
+.go-live-btn--loading {
+  opacity: 0.75;
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%) !important;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4) !important;
+}
+
+/* Spinner inside the button */
+@keyframes go-live-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.go-live-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  animation: go-live-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Error message below the button */
+.go-live-error {
+  font-size: 0.78rem;
+  color: #f87171;
+  text-align: center;
+  max-width: 300px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  margin: 0;
 }
 
 /* ── Responsive ── */

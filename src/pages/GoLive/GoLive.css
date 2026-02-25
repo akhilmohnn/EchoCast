@@ -427,6 +427,13 @@
     box-shadow: 0 2px 12px rgba(239, 68, 68, 0.08);
 }
 
+.gl-action-btn--pause {
+    background: rgba(20, 184, 166, 0.1);
+    border-color: rgba(20, 184, 166, 0.28);
+    color: #2dd4bf;
+    box-shadow: 0 2px 12px rgba(20, 184, 166, 0.1);
+}
+
 /* ══════════════════════════════════════════════
    Invite / QR Popup
    ══════════════════════════════════════════════ */
