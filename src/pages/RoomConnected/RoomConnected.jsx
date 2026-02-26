@@ -28,6 +28,7 @@ function RoomConnectedPage() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [goLiveLoading, setGoLiveLoading] = useState(false)
   const [goLiveError, setGoLiveError] = useState('')
+  const [showParticipantsList, setShowParticipantsList] = useState(false)
 
   const { isStreaming, startStream, stopStream } = useAudioStream()
 
@@ -332,217 +333,337 @@ function RoomConnectedPage() {
       <Header />
 
       <main className="hero">
-        <h1 className="hero-title">Room connected</h1>
-        <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
+        {/* ── MASTER (CREATOR) VIEW ── */}
+        {isCreator ? (
+          <>
+            <h1 className="hero-title">Room connected</h1>
+            <p className="hero-subtitle">You are in. Share the link or QR to invite others.</p>
 
-        {isCreator && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
-            <button
-              className={`go-live-btn${goLiveLoading ? ' go-live-btn--loading' : ''}`}
-              disabled={goLiveLoading}
-              onClick={async () => {
-                setGoLiveError('')
-                // If already streaming, just navigate back to GoLive page
-                if (isStreaming) {
-                  navigate('/golive', { state: room })
-                  return
-                }
-                setGoLiveLoading(true)
-                const ok = await startStream(room?.roomId)
-                setGoLiveLoading(false)
-                if (ok) {
-                  navigate('/golive', { state: room })
-                } else {
-                  setGoLiveError('Could not start stream. Select a tab and make sure to tick "Share tab audio" in the Chrome picker.')
-                }
-              }}
-            >
-              {goLiveLoading ? (
-                <>
-                  <span className="go-live-spinner" />
-                  Requesting audio…
-                </>
-              ) : (
-                <>
-                  <span className="go-live-dot" />
-                  {isStreaming ? 'Back to Studio' : 'Go Live'}
-                </>
-              )}
-            </button>
-            {goLiveError && (
-              <p className="go-live-error">{goLiveError}</p>
-            )}
-          </div>
-        )}
-
-        {room ? (
-          <div className="room-content-wrapper">
-            {/* Left side: Room info */}
-            <section className="room-card">
-              <div className="room-meta">
-                <div className="meta-item">
-                  <span className="meta-label">Room ID</span>
-                  <span className="meta-value">{room.roomId}</span>
-                </div>
-                <div className="meta-item">
-                  <span className="meta-label">Join Code</span>
-                  <span className="meta-value code">{room.roomCode}</span>
-                </div>
-                {room.isCreator && <div className="meta-item"><span className="meta-label">Role</span><span className="meta-value">Creator</span></div>}
-              </div>
-              <div className="qr-block">
-                <img src={room.qrDataUrl} alt="Room QR code" className="qr-image" />
-                <p className="qr-caption">Scan to join the room</p>
-              </div>
-
-              {/* Master Controls */}
-              {isCreator && (
-                <div className="master-controls">
-                  <input
-                    type="file"
-                    accept="audio/mp3,audio/*"
-                    ref={fileInputRef}
-                    style={{ display: 'none' }}
-                    onChange={(e) => handleFileChange(e, 'audio')}
-                  />
-                  <input
-                    type="file"
-                    accept="video/mp4,video/*"
-                    ref={videoInputRef}
-                    style={{ display: 'none' }}
-                    onChange={(e) => handleFileChange(e, 'video')}
-                  />
-                  <Button variant="primary" style={{ width: '100%' }} onClick={handleAudioUploadClick}>
-                    Upload Audio
-                  </Button>
-                  {(localMediaSrc || audioSrc) && mediaType === 'audio' && (
-                    <div className="audio-player-wrapper">
-                      <p className="file-name">Playing: {currentFileName}</p>
-                      <audio
-                        ref={audioRef}
-                        controls
-                        src={localMediaSrc || audioSrc}
-                        onPlay={handleMasterPlay}
-                        onPause={handleMasterPause}
-                        onSeeked={handleMasterSeek}
-                        onEnded={handleMasterPause}
-                      />
-                    </div>
-                  )}
-                  <Button variant="primary" style={{ width: '100%' }} onClick={handleVideoUploadClick}>
-                    Upload Video
-                  </Button>
-                  {mediaType === 'video' && (localMediaSrc || audioSrc) && !isVideoPopupOpen && (
-                    <Button variant="secondary" style={{ width: '100%' }} onClick={() => setIsVideoPopupOpen(true)}>
-                      Open Video Player
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* Participant View */}
-              {!isCreator && (
-                <div className="participant-sync-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <span style={{ fontWeight: '700', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717a' }}>Audio Sync</span>
-                    <label className="switch">
-                      <input
-                        type="checkbox"
-                        checked={participantAudioEnabled}
-                        onChange={(e) => setParticipantAudioEnabled(e.target.checked)}
-                      />
-                      <span className="slider round"></span>
-                    </label>
-                  </div>
-
-                  {/* ── Live streaming indicator ── */}
-                  <div className="live-stream-status">
-                    <span className={`live-stream-dot ${participantAudioEnabled ? 'live-stream-dot--active' : ''}`} />
-                    <span style={{ fontSize: '0.78rem', color: participantAudioEnabled ? '#a78bfa' : '#52525b' }}>
-                      {participantAudioEnabled
-                        ? 'Listening for live audio from host…'
-                        : 'Enable toggle to hear live & synced audio'}
-                    </span>
-                  </div>
-
-                  {currentFileName ? (
-                    <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
-                      <p style={{ marginBottom: '0.4rem', color: '#71717a', fontSize: '0.85rem' }}>Synced File:</p>
-                      <p style={{ fontWeight: '700', color: '#a78bfa', fontSize: '0.95rem' }}>{currentFileName}</p>
-                      <audio
-                        ref={audioRef}
-                        src={audioSrc}
-                        muted={!participantAudioEnabled}
-                      />
-                    </div>
-                  ) : (
-                    <p style={{ fontStyle: 'italic', color: '#3f3f46', textAlign: 'center', fontSize: '0.88rem', marginTop: '0.75rem' }}>Waiting for host to play audio...</p>
-                  )}
-                </div>
-              )}
-
-              <div style={{ marginTop: '1rem', width: '100%' }}>
-                <Button variant="secondary" onClick={handleLeave} style={{ width: '100%', borderColor: 'rgba(248,113,113,0.35)', color: '#f87171', background: 'rgba(248,113,113,0.08)' }}>
-                  Leave Room
-                </Button>
-              </div>
-            </section>
-
-            {/* Right side: Participants */}
-            <aside className="participants-panel">
-              <div className="participants-title">
-                <span>Connections</span>
-                <span className="participants-count">{participants.length}</span>
-              </div>
-              <ul className="participants-list">
-                {participants.map((user, idx) => (
-                  <li key={`${user.id}-${idx}`} className="participant-item">
-                    <div
-                      className="participant-avatar"
-                      style={{
-                        backgroundColor: `hsl(${Math.abs((user.name || user.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 360}, 70%, 80%)`,
-                        border: 'none',
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.8rem',
-                        fontWeight: 'bold',
-                        color: '#555'
-                      }}
-                    >
-                      {(user.name || '?').charAt(0).toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontWeight: user.id === currentUserId ? 'bold' : 'normal' }}>
-                        {user.name} {user.id === currentUserId && '(You)'}
-                      </span>
-                    </div>
-                    {isCreator && user.id !== currentUserId && (
-                      <button
-                        className="remove-btn"
-                        title="Remove User"
-                        onClick={() => handleRemoveUser(user)}
-                      >
-                        &times;
-                      </button>
-                    )}
-                  </li>
-                ))}
-                {participants.length === 0 && (
-                  <li className="participant-item" style={{ color: '#999', fontStyle: 'italic' }}>Waiting for users...</li>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
+              <button
+                className={`go-live-btn${goLiveLoading ? ' go-live-btn--loading' : ''}`}
+                disabled={goLiveLoading}
+                onClick={async () => {
+                  setGoLiveError('')
+                  if (isStreaming) {
+                    navigate('/golive', { state: room })
+                    return
+                  }
+                  setGoLiveLoading(true)
+                  const ok = await startStream(room?.roomId)
+                  setGoLiveLoading(false)
+                  if (ok) {
+                    navigate('/golive', { state: room })
+                  } else {
+                    setGoLiveError('Could not start stream. Select a tab and make sure to tick "Share tab audio" in the Chrome picker.')
+                  }
+                }}
+              >
+                {goLiveLoading ? (
+                  <>
+                    <span className="go-live-spinner" />
+                    Requesting audio…
+                  </>
+                ) : (
+                  <>
+                    <span className="go-live-dot" />
+                    {isStreaming ? 'Back to Studio' : 'Go Live'}
+                  </>
                 )}
-              </ul>
-            </aside>
-          </div>
+              </button>
+              {goLiveError && (
+                <p className="go-live-error">{goLiveError}</p>
+              )}
+            </div>
+
+            {room ? (
+              <div className="room-content-wrapper">
+                <section className="room-card">
+                  <div className="room-meta">
+                    <div className="meta-item">
+                      <span className="meta-label">Room ID</span>
+                      <span className="meta-value">{room.roomId}</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="meta-label">Join Code</span>
+                      <span className="meta-value code">{room.roomCode}</span>
+                    </div>
+                    {room.isCreator && <div className="meta-item"><span className="meta-label">Role</span><span className="meta-value">Creator</span></div>}
+                  </div>
+                  <div className="qr-block">
+                    <img src={room.qrDataUrl} alt="Room QR code" className="qr-image" />
+                    <p className="qr-caption">Scan to join the room</p>
+                  </div>
+
+                  <div className="master-controls">
+                    <input
+                      type="file"
+                      accept="audio/mp3,audio/*"
+                      ref={fileInputRef}
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleFileChange(e, 'audio')}
+                    />
+                    <input
+                      type="file"
+                      accept="video/mp4,video/*"
+                      ref={videoInputRef}
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleFileChange(e, 'video')}
+                    />
+                    <Button variant="primary" style={{ width: '100%' }} onClick={handleAudioUploadClick}>
+                      Upload Audio
+                    </Button>
+                    {(localMediaSrc || audioSrc) && mediaType === 'audio' && (
+                      <div className="audio-player-wrapper">
+                        <p className="file-name">Playing: {currentFileName}</p>
+                        <audio
+                          ref={audioRef}
+                          controls
+                          src={localMediaSrc || audioSrc}
+                          onPlay={handleMasterPlay}
+                          onPause={handleMasterPause}
+                          onSeeked={handleMasterSeek}
+                          onEnded={handleMasterPause}
+                        />
+                      </div>
+                    )}
+                    <Button variant="primary" style={{ width: '100%' }} onClick={handleVideoUploadClick}>
+                      Upload Video
+                    </Button>
+                    {mediaType === 'video' && (localMediaSrc || audioSrc) && !isVideoPopupOpen && (
+                      <Button variant="secondary" style={{ width: '100%' }} onClick={() => setIsVideoPopupOpen(true)}>
+                        Open Video Player
+                      </Button>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: '1rem', width: '100%' }}>
+                    <Button variant="secondary" onClick={handleLeave} style={{ width: '100%', borderColor: 'rgba(248,113,113,0.35)', color: '#f87171', background: 'rgba(248,113,113,0.08)' }}>
+                      Leave Room
+                    </Button>
+                  </div>
+                </section>
+
+                <aside className="participants-panel">
+                  <div className="participants-title">
+                    <span>Connections</span>
+                    <span className="participants-count">{participants.length}</span>
+                  </div>
+                  <ul className="participants-list">
+                    {participants.map((user, idx) => (
+                      <li key={`${user.id}-${idx}`} className="participant-item">
+                        <div
+                          className="participant-avatar"
+                          style={{
+                            backgroundColor: `hsl(${Math.abs((user.name || user.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 360}, 70%, 80%)`,
+                            border: 'none',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.8rem',
+                            fontWeight: 'bold',
+                            color: '#555'
+                          }}
+                        >
+                          {(user.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontWeight: user.id === currentUserId ? 'bold' : 'normal' }}>
+                            {user.name} {user.id === currentUserId && '(You)'}
+                          </span>
+                        </div>
+                        {user.id !== currentUserId && (
+                          <button
+                            className="remove-btn"
+                            title="Remove User"
+                            onClick={() => handleRemoveUser(user)}
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                    {participants.length === 0 && (
+                      <li className="participant-item" style={{ color: '#999', fontStyle: 'italic' }}>Waiting for users...</li>
+                    )}
+                  </ul>
+                </aside>
+              </div>
+            ) : (
+              <div className="status status-error">Missing room info. Please re-join.</div>
+            )}
+          </>
         ) : (
-          <div className="status status-error">Missing room info. Please re-join.</div>
+          /* ══════════════════════════════════════════════════════════
+             ██  SLAVE (PARTICIPANT) VIEW – Immersive Audio Experience
+             ══════════════════════════════════════════════════════════ */
+          <>
+            <h1 className="hero-title" style={{ fontSize: 'clamp(2rem, 6vw, 3.5rem)', marginBottom: '0.5rem' }}>
+              Listening Room
+            </h1>
+
+            {room ? (
+              <div className="slave-view">
+                {/* Room header label */}
+                <div className="slave-room-header">
+                  <span className="slave-room-label">Connected to</span>
+                  <div className="slave-room-name">{room.roomCode || room.roomId}</div>
+                </div>
+
+                {/* ── The Big Audio Orb ── */}
+                <div className={`audio-orb-wrapper${participantAudioEnabled ? ' audio-orb-wrapper--active' : ''}`}>
+                  <div className="audio-orb-ring audio-orb-ring--3" />
+                  <div className="audio-orb-ring audio-orb-ring--2" />
+                  <div className="audio-orb-ring audio-orb-ring--1" />
+
+                  <button
+                    className={`audio-orb-btn${participantAudioEnabled ? ' audio-orb-btn--active' : ''}`}
+                    onClick={() => setParticipantAudioEnabled(prev => !prev)}
+                    title={participantAudioEnabled ? 'Tap to mute' : 'Tap to listen'}
+                  >
+                    <div className="audio-orb-icon">
+                      {participantAudioEnabled ? (
+                        /* Volume On SVG */
+                        <svg viewBox="0 0 24 24">
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor" />
+                          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        </svg>
+                      ) : (
+                        /* Volume Off SVG */
+                        <svg viewBox="0 0 24 24">
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor" />
+                          <line x1="23" y1="9" x2="17" y2="15" />
+                          <line x1="17" y1="9" x2="23" y2="15" />
+                        </svg>
+                      )}
+                    </div>
+
+                    {/* Sound wave bars */}
+                    <div className="sound-wave-bars">
+                      <div className="sound-wave-bar" style={{ height: '5px' }} />
+                      <div className="sound-wave-bar" style={{ height: '10px' }} />
+                      <div className="sound-wave-bar" style={{ height: '16px' }} />
+                      <div className="sound-wave-bar" style={{ height: '10px' }} />
+                      <div className="sound-wave-bar" style={{ height: '5px' }} />
+                    </div>
+
+                    <span className="audio-orb-label">
+                      {participantAudioEnabled ? 'Listening' : 'Tap to Listen'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Status message */}
+                <div className={`slave-status-msg${participantAudioEnabled ? ' slave-status-msg--active' : ''}`}>
+                  {participantAudioEnabled ? (
+                    <>
+                      <strong>Audio Enabled</strong>
+                      Syncing with host in real-time
+                    </>
+                  ) : (
+                    <>
+                      <strong>Audio Muted</strong>
+                      Tap the orb above to start listening
+                    </>
+                  )}
+                </div>
+
+                {/* Synced file indicator */}
+                {currentFileName ? (
+                  <div className="slave-synced-file">
+                    <svg className="slave-synced-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                    <span className="slave-synced-file-name">{currentFileName}</span>
+                  </div>
+                ) : (
+                  <span className="slave-waiting-text">Waiting for host to play audio…</span>
+                )}
+
+                {/* Hidden audio element for sync */}
+                <audio
+                  ref={audioRef}
+                  src={audioSrc}
+                  muted={!participantAudioEnabled}
+                  style={{ display: 'none' }}
+                />
+
+                {/* Bottom bar: Participants chip + Leave */}
+                <div className="slave-bottom-bar">
+                  <div className="slave-participants-chip" onClick={() => setShowParticipantsList(prev => !prev)} role="button" tabIndex={0}>
+                    <svg className="slave-participants-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <span className="slave-participants-chip-count">{participants.length}</span>
+                    <span className="slave-participants-chip-label">
+                      {participants.length === 1 ? 'Participant' : 'Participants'}
+                    </span>
+                    <svg className={`slave-chip-chevron${showParticipantsList ? ' slave-chip-chevron--open' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+
+                  <button className="slave-leave-btn" onClick={handleLeave}>
+                    <svg className="slave-leave-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Leave Room
+                  </button>
+                </div>
+
+                {/* Expandable participants roster */}
+                <div className={`slave-roster${showParticipantsList ? ' slave-roster--open' : ''}`}>
+                  <div className="slave-roster-inner">
+                    <div className="slave-roster-header">
+                      <span className="slave-roster-title">Who's Here</span>
+                      <span className="slave-roster-badge">{participants.length}</span>
+                    </div>
+                    <ul className="slave-roster-list">
+                      {participants.map((user, idx) => {
+                        const hue = Math.abs((user.name || user.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % 360
+                        return (
+                          <li key={`${user.id}-${idx}`} className="slave-roster-item">
+                            <div className="slave-roster-avatar" style={{ background: `hsl(${hue}, 65%, 72%)` }}>
+                              {(user.name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="slave-roster-info">
+                              <span className="slave-roster-name">
+                                {user.name}{user.id === currentUserId && <span className="slave-roster-you">You</span>}
+                              </span>
+                              <span className="slave-roster-role">
+                                {user.id === room?.creatorId ? 'Host' : 'Listener'}
+                              </span>
+                            </div>
+                            <span className={`slave-roster-dot${user.id === room?.creatorId ? ' slave-roster-dot--host' : ''}`} />
+                          </li>
+                        )
+                      })}
+                      {participants.length === 0 && (
+                        <li className="slave-roster-item slave-roster-empty">No one else here yet…</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="status status-error">Missing room info. Please re-join.</div>
+            )}
+          </>
         )}
       </main>
 
-      {/* Video Popup Overlay */}
+      {/* Video Popup Overlay (Master only) */}
       {isVideoPopupOpen && (localMediaSrc || audioSrc) && mediaType === 'video' && (
         <div className="video-popup-overlay">
           <div className="video-popup-content">

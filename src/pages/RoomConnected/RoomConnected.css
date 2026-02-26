@@ -373,6 +373,620 @@ audio {
   margin: 0;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ██  SLAVE (PARTICIPANT) VIEW – Immersive Audio Experience
+   ══════════════════════════════════════════════════════════════ */
+
+.slave-view {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  width: 100%;
+  max-width: 520px;
+  padding: 1rem 0 3rem;
+}
+
+/* ── Room name / header area ── */
+.slave-room-header {
+  text-align: center;
+}
+
+.slave-room-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+
+.slave-room-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #52525b;
+  font-weight: 600;
+}
+
+/* ── The Big Audio Toggle ── */
+.audio-orb-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 220px;
+  height: 220px;
+}
+
+/* Animated rings around the orb */
+.audio-orb-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(167, 139, 250, 0.08);
+  pointer-events: none;
+  transition: border-color 0.5s, transform 0.5s;
+}
+
+.audio-orb-ring--1 {
+  width: 100%;
+  height: 100%;
+}
+
+.audio-orb-ring--2 {
+  width: 130%;
+  height: 130%;
+}
+
+.audio-orb-ring--3 {
+  width: 160%;
+  height: 160%;
+}
+
+/* Active state rings */
+.audio-orb-wrapper--active .audio-orb-ring--1 {
+  border-color: rgba(167, 139, 250, 0.25);
+  animation: ring-pulse-1 2.4s ease-in-out infinite;
+}
+
+.audio-orb-wrapper--active .audio-orb-ring--2 {
+  border-color: rgba(139, 92, 246, 0.15);
+  animation: ring-pulse-2 2.4s ease-in-out infinite 0.3s;
+}
+
+.audio-orb-wrapper--active .audio-orb-ring--3 {
+  border-color: rgba(124, 58, 237, 0.08);
+  animation: ring-pulse-3 2.4s ease-in-out infinite 0.6s;
+}
+
+@keyframes ring-pulse-1 {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.06);
+    opacity: 0.7;
+  }
+}
+
+@keyframes ring-pulse-2 {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.08);
+    opacity: 0.6;
+  }
+}
+
+@keyframes ring-pulse-3 {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 0.5;
+  }
+}
+
+/* The main orb button */
+.audio-orb-btn {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 2px solid rgba(167, 139, 250, 0.15);
+  background: radial-gradient(circle at 40% 35%, rgba(167, 139, 250, 0.12), rgba(15, 15, 25, 0.95) 70%);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 0 50px rgba(167, 139, 250, 0.05),
+    inset 0 0 40px rgba(167, 139, 250, 0.03);
+  outline: none;
+  z-index: 2;
+}
+
+.audio-orb-btn:hover {
+  transform: scale(1.05);
+  border-color: rgba(167, 139, 250, 0.3);
+  box-shadow:
+    0 0 60px rgba(167, 139, 250, 0.12),
+    inset 0 0 50px rgba(167, 139, 250, 0.06);
+}
+
+.audio-orb-btn:active {
+  transform: scale(0.97);
+}
+
+/* Active orb state */
+.audio-orb-btn--active {
+  border-color: rgba(167, 139, 250, 0.4);
+  background: radial-gradient(circle at 40% 35%, rgba(167, 139, 250, 0.25), rgba(15, 15, 25, 0.95) 70%);
+  box-shadow:
+    0 0 80px rgba(167, 139, 250, 0.2),
+    0 0 120px rgba(139, 92, 246, 0.08),
+    inset 0 0 50px rgba(167, 139, 250, 0.08);
+}
+
+/* Sound icon inside the orb */
+.audio-orb-icon {
+  position: relative;
+  width: 42px;
+  height: 42px;
+}
+
+.audio-orb-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: #52525b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.4s;
+}
+
+.audio-orb-btn--active .audio-orb-icon svg {
+  stroke: #a78bfa;
+  filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.5));
+}
+
+.audio-orb-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #52525b;
+  font-weight: 700;
+  transition: color 0.4s;
+  font-family: inherit;
+}
+
+.audio-orb-btn--active .audio-orb-label {
+  color: #a78bfa;
+}
+
+/* ── Sound wave bars (visible when active) ── */
+.sound-wave-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 22px;
+  margin-top: 0.15rem;
+}
+
+.sound-wave-bar {
+  width: 3.5px;
+  border-radius: 2px;
+  background: #3f3f46;
+  transition: background 0.3s;
+}
+
+.audio-orb-btn--active .sound-wave-bar {
+  background: #a78bfa;
+}
+
+.audio-orb-btn--active .sound-wave-bar:nth-child(1) {
+  animation: wave-bar 1.1s ease-in-out infinite 0s;
+}
+
+.audio-orb-btn--active .sound-wave-bar:nth-child(2) {
+  animation: wave-bar 1.1s ease-in-out infinite 0.15s;
+}
+
+.audio-orb-btn--active .sound-wave-bar:nth-child(3) {
+  animation: wave-bar 1.1s ease-in-out infinite 0.3s;
+}
+
+.audio-orb-btn--active .sound-wave-bar:nth-child(4) {
+  animation: wave-bar 1.1s ease-in-out infinite 0.15s;
+}
+
+.audio-orb-btn--active .sound-wave-bar:nth-child(5) {
+  animation: wave-bar 1.1s ease-in-out infinite 0s;
+}
+
+@keyframes wave-bar {
+
+  0%,
+  100% {
+    height: 5px;
+  }
+
+  50% {
+    height: 22px;
+  }
+}
+
+/* ── Status message below orb ── */
+.slave-status-msg {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #52525b;
+  line-height: 1.5;
+  max-width: 300px;
+  transition: color 0.3s;
+}
+
+.slave-status-msg--active {
+  color: #8b8b95;
+}
+
+.slave-status-msg strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #a78bfa;
+  margin-bottom: 0.15rem;
+  font-weight: 700;
+}
+
+.slave-status-msg--active strong {
+  color: #c4b5fd;
+}
+
+/* ── Synced file label ── */
+.slave-synced-file {
+  text-align: center;
+  padding: 0.65rem 1.2rem;
+  background: rgba(167, 139, 250, 0.06);
+  border: 1px solid rgba(167, 139, 250, 0.12);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.slave-synced-file-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: #a78bfa;
+}
+
+.slave-synced-file-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Bottom bar: Participants + Leave ── */
+.slave-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 1rem;
+  padding: 0 0.5rem;
+}
+
+/* Participant counter chip */
+.slave-participants-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 50px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  cursor: default;
+  transition: border-color 0.3s;
+}
+
+.slave-participants-chip:hover {
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+.slave-participants-chip-icon {
+  width: 20px;
+  height: 20px;
+  color: #71717a;
+}
+
+.slave-participants-chip-count {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #e4e4e7;
+}
+
+.slave-participants-chip-label {
+  font-size: 0.72rem;
+  color: #52525b;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+/* Leave button */
+.slave-leave-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.6rem;
+  border-radius: 50px;
+  border: 1.5px solid rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.06);
+  color: #f87171;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-family: inherit;
+}
+
+.slave-leave-btn:hover {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.45);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(248, 113, 113, 0.15);
+}
+
+.slave-leave-btn:active {
+  transform: scale(0.96);
+}
+
+.slave-leave-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Waiting shimmer animation ── */
+.slave-waiting-text {
+  font-size: 0.82rem;
+  color: #3f3f46;
+  font-style: italic;
+  animation: shimmer-text 2s ease-in-out infinite;
+}
+
+@keyframes shimmer-text {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Chevron on participants chip ── */
+.slave-chip-chevron {
+  width: 14px;
+  height: 14px;
+  color: #52525b;
+  margin-left: 0.15rem;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s;
+  flex-shrink: 0;
+}
+
+.slave-chip-chevron--open {
+  transform: rotate(180deg);
+  color: #a78bfa;
+}
+
+/* Make chip look clickable */
+.slave-participants-chip {
+  cursor: pointer;
+  user-select: none;
+}
+
+.slave-participants-chip:hover {
+  border-color: rgba(167, 139, 250, 0.25);
+  background: rgba(167, 139, 250, 0.06);
+}
+
+.slave-participants-chip:active {
+  transform: scale(0.97);
+}
+
+/* ══════════════════════════════════════════════════════
+   ██  Expandable Participant Roster
+   ══════════════════════════════════════════════════════ */
+
+.slave-roster {
+  width: 100%;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.35s ease;
+  opacity: 0;
+}
+
+.slave-roster--open {
+  max-height: 500px;
+  opacity: 1;
+}
+
+.slave-roster-inner {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.slave-roster-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.7rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.slave-roster-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #71717a;
+}
+
+.slave-roster-badge {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 50px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Roster list ── */
+.slave-roster-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.slave-roster-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.slave-roster-list::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.2);
+  border-radius: 4px;
+}
+
+.slave-roster-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.35rem;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.slave-roster-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.slave-roster-item+.slave-roster-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.slave-roster-empty {
+  color: #3f3f46;
+  font-style: italic;
+  font-size: 0.82rem;
+  justify-content: center;
+  padding: 1rem;
+}
+
+/* Avatar */
+.slave-roster-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Info block */
+.slave-roster-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow: hidden;
+}
+
+.slave-roster-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.slave-roster-you {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.slave-roster-role {
+  font-size: 0.7rem;
+  color: #52525b;
+  letter-spacing: 0.05em;
+}
+
+/* Online dot */
+.slave-roster-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.4);
+}
+
+.slave-roster-dot--host {
+  background: #facc15;
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.4);
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .room-content-wrapper {
@@ -383,5 +997,39 @@ audio {
   .participants-panel {
     width: 100%;
     max-width: 420px;
+  }
+
+  .slave-view {
+    padding: 0.5rem 0 2rem;
+    gap: 2rem;
+  }
+
+  .audio-orb-wrapper {
+    width: 180px;
+    height: 180px;
+  }
+
+  .audio-orb-btn {
+    width: 130px;
+    height: 130px;
+  }
+
+  .audio-orb-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .slave-bottom-bar {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .slave-leave-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .slave-roster-inner {
+    padding: 0.75rem 1rem;
   }
 }
