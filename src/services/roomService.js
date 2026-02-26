@@ -2,7 +2,7 @@ import QRCode from 'qrcode'
 
 const REDIS_URL = import.meta.env.VITE_REDIS_REST_URL
 const REDIS_TOKEN = import.meta.env.VITE_REDIS_REST_TOKEN
-const ROOM_TTL_SECONDS = 900 // 15 minutes
+const ROOM_TTL_SECONDS = 1500 // 25 minutes
 const ROOM_KEY_PREFIX = 'room:'
 const PARTICIPANTS_KEY_PREFIX = 'room:participants:'
 const AUDIO_STATE_KEY_PREFIX = 'room:audio:'
@@ -120,12 +120,12 @@ export async function getParticipants(roomId) {
 
   // if (!response.ok) return []
   if (!response.ok) {
-     throw new Error(`Failed to fetch participants: ${response.status}`)
+    throw new Error(`Failed to fetch participants: ${response.status}`)
   }
 
   const json = await response.json()
   const rawList = json?.result || []
-  
+
   // Parse JSON strings back to objects
   return rawList.map(item => {
     try {
@@ -214,7 +214,7 @@ export async function joinRoom(roomId, roomCode, userName) {
 
   const userId = getClientId()
   const user = { id: userId, name: userName || `User-${userId.slice(-4)}` }
-  
+
   // Check if already in participants to avoid duplicates (optional, but good)
   // For now just add, the UI dedupes. Can improve later.
   await addParticipant(normalizedRoomId, user)
@@ -222,10 +222,10 @@ export async function joinRoom(roomId, roomCode, userName) {
   const joinUrl = `${window.location.origin}/join?room=${normalizedRoomId}&code=${normalizedRoomCode}`
   const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1 })
 
-  return { 
-    roomId: normalizedRoomId, 
-    roomCode: normalizedRoomCode, 
-    joinUrl, 
+  return {
+    roomId: normalizedRoomId,
+    roomCode: normalizedRoomCode,
+    joinUrl,
     qrDataUrl,
     creatorId: record.creatorId,
     isCreator: record.creatorId === userId
@@ -237,7 +237,7 @@ export async function updateAudioState(roomId, state) {
   const baseUrl = getRedisBaseUrl()
   const key = getAudioStateKey(roomId)
   const payload = encodeURIComponent(JSON.stringify(state))
-  
+
   // Set audio state with same expiry as room (roughly)
   const url = `${baseUrl}/setex/${key}/${ROOM_TTL_SECONDS}/${payload}`
 
@@ -275,7 +275,7 @@ export async function uploadAudioChunked(roomId, fileDataUrl) {
   ensureRedisConfig()
   const baseUrl = getRedisBaseUrl()
   const keyBase = getAudioDataKey(roomId)
-  
+
   // Calculate chunks
   const totalLength = fileDataUrl.length
   const totalChunks = Math.ceil(totalLength / CHUNK_SIZE)
@@ -286,26 +286,26 @@ export async function uploadAudioChunked(roomId, fileDataUrl) {
     const start = i * CHUNK_SIZE
     const end = Math.min(start + CHUNK_SIZE, totalLength)
     const chunk = fileDataUrl.substring(start, end)
-    
+
     const key = `${keyBase}:${i}`
     const payload = encodeURIComponent(chunk)
     // Use SETEX to expire same as room
     const url = `${baseUrl}/setex/${key}/${ROOM_TTL_SECONDS}/${payload}`
-    
+
     promises.push(fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+      method: 'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
     }))
   }
 
   await Promise.all(promises)
-  
+
   // Store meta about data so we know how many chunks to fetch
   const metaKey = `${keyBase}:meta`
   const metaPayload = encodeURIComponent(JSON.stringify({ totalChunks, totalLength }))
   await fetch(`${baseUrl}/setex/${metaKey}/${ROOM_TTL_SECONDS}/${metaPayload}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
   })
 }
 
@@ -313,43 +313,43 @@ export async function downloadAudioChunked(roomId) {
   ensureRedisConfig()
   const baseUrl = getRedisBaseUrl()
   const keyBase = getAudioDataKey(roomId)
-  
+
   // Get Meta
   const metaKey = `${keyBase}:meta`
   const metaRes = await fetch(`${baseUrl}/get/${metaKey}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
   })
   if (!metaRes.ok) return null
   const metaJson = await metaRes.json()
   if (!metaJson.result) return null
-  
+
   let meta
   try {
-     meta = JSON.parse(decodeURIComponent(metaJson.result))
+    meta = JSON.parse(decodeURIComponent(metaJson.result))
   } catch (e) {
-     return null
+    return null
   }
-  
+
   const { totalChunks } = meta
-  
+
   // Fetch all chunks
   const promises = []
   for (let i = 0; i < totalChunks; i++) {
-      const key = `${keyBase}:${i}`
-      promises.push(fetch(`${baseUrl}/get/${key}`, {
-          headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-      }).then(r => r.json()))
+    const key = `${keyBase}:${i}`
+    promises.push(fetch(`${baseUrl}/get/${key}`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    }).then(r => r.json()))
   }
-  
+
   const results = await Promise.all(promises)
-  
+
   // Reassemble
   let fullDataUrl = ''
   for (const res of results) {
-      if (res.result) {
-          fullDataUrl += decodeURIComponent(res.result)
-      }
+    if (res.result) {
+      fullDataUrl += decodeURIComponent(res.result)
+    }
   }
-  
+
   return fullDataUrl
 }

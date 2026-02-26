@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react'
-import { setLiveState, getLiveState, uploadLiveChunk } from '../services/liveStreamService'
+import { setLiveState, getLiveState, uploadChunkAndState } from '../services/liveStreamService'
 
 const AudioStreamContext = createContext(null)
 
@@ -75,7 +75,7 @@ export function AudioStreamProvider({ children }) {
     // ── MediaRecorder (streams audio chunks to Redis) ──────────────────
     // Strategy: stop-then-restart cycle so EVERY blob is a COMPLETE,
     // independently playable audio file (includes its own WebM header).
-    // Slaves can just play each blob with a plain <audio> element.
+    // Cycle length: ~500ms for near-real-time latency.
     const startRecording = useCallback((mediaStream, roomId) => {
         if (!roomId) return
         roomIdRef.current = roomId
@@ -84,16 +84,14 @@ export function AudioStreamProvider({ children }) {
         const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
             .find(m => MediaRecorder.isTypeSupported(m)) || ''
 
-        const mimeForState = mimeType.split(';')[0] || 'audio/webm'  // clean mime for data-URI
+        const mimeForState = mimeType.split(';')[0] || 'audio/webm'
 
-        // We'll keep creating fresh recorders every cycle
         let cycleTimer = null
         let currentRecorder = null
         let stopped = false
 
         const recordOneCycle = () => {
             if (stopped) return
-            // Don't record if tracks are gone (stream ended)
             if (mediaStream.getAudioTracks().every(t => t.readyState === 'ended')) {
                 return
             }
@@ -105,42 +103,38 @@ export function AudioStreamProvider({ children }) {
                 const seq = seqRef.current++
                 try {
                     const buf = await e.data.arrayBuffer()
-                    console.debug(`[EchoCast] uploading chunk ${seq} (${buf.byteLength} bytes)`)
-                    await uploadLiveChunk(roomId, seq, buf)
-                    await setLiveState(roomId, {
+                    // Use pipeline: upload chunk + update state in ONE HTTP request
+                    await uploadChunkAndState(roomId, seq, buf, {
                         active: true,
                         paused: pausedRef.current,
                         seq,
                         mimeType: mimeForState,
                         ts: Date.now(),
                     })
-                    console.debug(`[EchoCast] chunk ${seq} uploaded OK`)
                 } catch (err) {
                     console.warn('[EchoCast] chunk upload error', err)
                 }
             }
 
             rec.onstop = () => {
-                // After this recorder stops and its data fires, start a new one
                 if (!stopped) {
-                    cycleTimer = setTimeout(recordOneCycle, 50)  // tiny gap
+                    cycleTimer = setTimeout(recordOneCycle, 10)  // minimal gap (10ms)
                 }
             }
 
             rec.start()
             currentRecorder = rec
 
-            // Stop this recorder after ~2 seconds to produce a complete blob
+            // Stop this recorder after ~500ms to produce a complete blob
             setTimeout(() => {
                 if (rec.state === 'recording') {
                     rec.stop()
                 }
-            }, 2000)
+            }, 500)
         }
 
         recordOneCycle()
 
-        // Store cleanup function
         recorderRef.current = {
             stop() {
                 stopped = true
@@ -183,7 +177,9 @@ export function AudioStreamProvider({ children }) {
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
-                    sampleRate: 44100,
+                    autoGainControl: false,
+                    channelCount: 2,
+                    sampleRate: 48000,
                 },
             })
 
