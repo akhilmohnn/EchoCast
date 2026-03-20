@@ -4,10 +4,11 @@
  * Real-time live audio streaming via Redis (Upstash REST).
  *
  * Architecture (optimised for low latency):
- *   - Short 500ms recording cycles for near-real-time chunks
+ *   - Short 400ms recording cycles for near-real-time chunks
  *   - Each chunk is a COMPLETE, independently-playable audio file
  *   - Uses Upstash POST-body API so large payloads work
- *   - Slaves poll every ~600ms and play via blob URLs (faster than data URIs)
+ *   - Slaves poll every ~450ms and play via Web Audio API (gapless)
+ *   - Batch pipeline downloads to reduce round-trips
  * -------------------------------------------------------------------
  */
 
@@ -76,24 +77,34 @@ export async function getLiveState(roomId) {
 
 // ─── Audio chunk upload/download ─────────────────────────────────────
 
-/**
- * Upload a complete audio blob (ArrayBuffer → base64 string) to Redis.
- * Uses the POST-body API so there's no URL length limit.
- */
-export async function uploadLiveChunk(roomId, seq, arrayBuffer) {
+// Helper: ArrayBuffer → base64
+function arrayBufferToBase64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer)
-    // Convert to base64 in chunks to avoid call-stack overflow on large buffers
     const SLICE = 8192
     let b64 = ''
     for (let i = 0; i < bytes.length; i += SLICE) {
         b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + SLICE))
     }
-    b64 = btoa(b64)
+    return btoa(b64)
+}
 
+// Helper: base64 → ArrayBuffer
+function base64ToArrayBuffer(b64) {
+    const binaryStr = atob(b64)
+    const len = binaryStr.length
+    const bytes = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i)
+    }
+    return bytes.buffer
+}
+
+/**
+ * Upload a complete audio blob (ArrayBuffer → base64 string) to Redis.
+ */
+export async function uploadLiveChunk(roomId, seq, arrayBuffer) {
+    const b64 = arrayBufferToBase64(arrayBuffer)
     const key = `${LIVE_CHUNK_PREFIX}${roomId}:${seq}`
-
-    // Pipeline: SETEX chunk + SETEX state in a single round-trip
-    // This halves the network latency for each cycle
     return runPipeline([
         ['SETEX', key, CHUNK_TTL, b64],
     ])
@@ -103,18 +114,9 @@ export async function uploadLiveChunk(roomId, seq, arrayBuffer) {
  * Upload the chunk AND update the live state atomically in one round-trip.
  */
 export async function uploadChunkAndState(roomId, seq, arrayBuffer, stateObj) {
-    const bytes = new Uint8Array(arrayBuffer)
-    const SLICE = 8192
-    let b64 = ''
-    for (let i = 0; i < bytes.length; i += SLICE) {
-        b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + SLICE))
-    }
-    b64 = btoa(b64)
-
+    const b64 = arrayBufferToBase64(arrayBuffer)
     const chunkKey = `${LIVE_CHUNK_PREFIX}${roomId}:${seq}`
     const stateKey = `${LIVE_STATE_PREFIX}${roomId}`
-
-    // Single pipeline = one HTTP request for both operations
     return runPipeline([
         ['SETEX', chunkKey, CHUNK_TTL, b64],
         ['SETEX', stateKey, STATE_TTL, JSON.stringify(stateObj)],
@@ -122,22 +124,14 @@ export async function uploadChunkAndState(roomId, seq, arrayBuffer, stateObj) {
 }
 
 /**
- * Download a chunk. Returns an ArrayBuffer (for blob URL creation) or null.
+ * Download a chunk. Returns an ArrayBuffer or null.
  */
 export async function downloadLiveChunk(roomId, seq) {
     const key = `${LIVE_CHUNK_PREFIX}${roomId}:${seq}`
     const json = await runCommand(['GET', key])
     const b64 = json?.result
     if (!b64) return null
-
-    // Decode base64 → ArrayBuffer
-    const binaryStr = atob(b64)
-    const len = binaryStr.length
-    const bytes = new Uint8Array(len)
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i)
-    }
-    return bytes.buffer
+    return base64ToArrayBuffer(b64)
 }
 
 /**
@@ -154,20 +148,12 @@ export async function downloadChunkAndState(roomId, seq) {
 
     if (!results || !Array.isArray(results)) return { chunk: null, state: null }
 
-    // Parse chunk
     let chunk = null
     const b64 = results[0]?.result
     if (b64 && b64 !== 'null') {
-        const binaryStr = atob(b64)
-        const len = binaryStr.length
-        const bytes = new Uint8Array(len)
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryStr.charCodeAt(i)
-        }
-        chunk = bytes.buffer
+        chunk = base64ToArrayBuffer(b64)
     }
 
-    // Parse state
     let state = null
     const stateRaw = results[1]?.result
     if (stateRaw && stateRaw !== 'null') {
@@ -175,4 +161,33 @@ export async function downloadChunkAndState(roomId, seq) {
     }
 
     return { chunk, state }
+}
+
+/**
+ * Download multiple chunks + state in a SINGLE pipeline request.
+ * Reduces round-trips when fetching several sequential chunks.
+ * Returns { chunks: [{seq, arrayBuffer}, ...], state }
+ */
+export async function downloadMultipleChunksAndState(roomId, seqs) {
+    const commands = seqs.map(seq => ['GET', `${LIVE_CHUNK_PREFIX}${roomId}:${seq}`])
+    commands.push(['GET', `${LIVE_STATE_PREFIX}${roomId}`])
+
+    const results = await runPipeline(commands)
+    if (!results || !Array.isArray(results)) return { chunks: [], state: null }
+
+    const chunks = []
+    for (let i = 0; i < seqs.length; i++) {
+        const b64 = results[i]?.result
+        if (b64 && b64 !== 'null') {
+            chunks.push({ seq: seqs[i], arrayBuffer: base64ToArrayBuffer(b64) })
+        }
+    }
+
+    let state = null
+    const stateRaw = results[results.length - 1]?.result
+    if (stateRaw && stateRaw !== 'null') {
+        try { state = JSON.parse(stateRaw) } catch { state = null }
+    }
+
+    return { chunks, state }
 }

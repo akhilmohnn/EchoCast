@@ -353,3 +353,31 @@ export async function downloadAudioChunked(roomId) {
 
   return fullDataUrl
 }
+
+/**
+ * Download chunked audio and return a Blob URL instead of a DataURL.
+ * Blob URLs are far more memory-efficient — the browser manages the blob
+ * in native memory rather than keeping a multi-MB string on the JS heap.
+ */
+export async function downloadAudioAsBlobUrl(roomId) {
+  const dataUrl = await downloadAudioChunked(roomId)
+  if (!dataUrl) return null
+
+  // Parse the data URL: data:[<mediatype>][;base64],<data>
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s)
+  if (!match) return dataUrl // fallback if format is unexpected
+
+  const mimeType = match[1]
+  const b64Data = match[2]
+
+  // Decode base64 → binary in chunks to avoid call-stack overflow
+  const binaryStr = atob(b64Data)
+  const len = binaryStr.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryStr.charCodeAt(i)
+  }
+
+  const blob = new Blob([bytes.buffer], { type: mimeType })
+  return URL.createObjectURL(blob)
+}

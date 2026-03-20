@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Header, Button, Footer } from '../../components'
-import { getParticipants, removeParticipant, getCurrentUserId, updateAudioState, getAudioState, uploadAudioChunked, downloadAudioChunked } from '../../services/roomService'
+import { getParticipants, removeParticipant, getCurrentUserId, updateAudioState, getAudioState, uploadAudioChunked, downloadAudioAsBlobUrl } from '../../services/roomService'
 import { useAudioStream } from '../../context/AudioStreamContext'
 import { useLiveAudioPlayer } from '../../hooks/useLiveAudioPlayer'
 import '../Landing/Landing.css'
@@ -98,11 +98,15 @@ function RoomConnectedPage() {
         // Update file if changed via version check
         if (audioState.fileVersion && audioState.fileVersion !== currentFileVersion && !isDownloading) {
           setIsDownloading(true)
-          // Download chunked file
           try {
-            const dataUrl = await downloadAudioChunked(room.roomId)
-            if (dataUrl) {
-              setAudioSrc(dataUrl)
+            // Revoke old blob URL to prevent memory leaks
+            if (audioSrc && audioSrc.startsWith('blob:')) {
+              URL.revokeObjectURL(audioSrc)
+            }
+            // Download as Blob URL (much more efficient than multi-MB DataURL strings)
+            const blobUrl = await downloadAudioAsBlobUrl(room.roomId)
+            if (blobUrl) {
+              setAudioSrc(blobUrl)
               setCurrentFileName(audioState.fileName)
               setCurrentFileVersion(audioState.fileVersion)
             }
@@ -247,29 +251,31 @@ function RoomConnectedPage() {
     } else {
       const localUrl = URL.createObjectURL(file)
       setLocalMediaSrc(localUrl)
+      setAudioSrc(localUrl) // Use Blob URL locally (no DataURL in React state)
 
-      const reader = new FileReader()
-      reader.onload = async (evt) => {
-        const dataUrl = evt.target.result
-        setAudioSrc(dataUrl)
+      // Upload to Redis in background — still needs DataURL for chunked text storage
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = (e) => resolve(e.target.result)
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
 
-        try {
-          await uploadAudioChunked(room.roomId, dataUrl)
-          const newVersion = Date.now()
-          setCurrentFileVersion(newVersion)
-          await updateAudioState(room.roomId, {
-            fileVersion: newVersion,
-            fileName: file.name,
-            status: 'paused',
-            position: 0,
-            timestamp: Date.now()
-          })
-        } catch (err) {
-          console.error('Upload failed', err)
-          alert('Failed to upload file')
-        }
+        await uploadAudioChunked(room.roomId, dataUrl)
+        const newVersion = Date.now()
+        setCurrentFileVersion(newVersion)
+        await updateAudioState(room.roomId, {
+          fileVersion: newVersion,
+          fileName: file.name,
+          status: 'paused',
+          position: 0,
+          timestamp: Date.now()
+        })
+      } catch (err) {
+        console.error('Upload failed', err)
+        alert('Failed to upload file')
       }
-      reader.readAsDataURL(file)
     }
   }
 

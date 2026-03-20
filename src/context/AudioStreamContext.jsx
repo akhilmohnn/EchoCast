@@ -75,7 +75,7 @@ export function AudioStreamProvider({ children }) {
     // ── MediaRecorder (streams audio chunks to Redis) ──────────────────
     // Strategy: stop-then-restart cycle so EVERY blob is a COMPLETE,
     // independently playable audio file (includes its own WebM header).
-    // Cycle length: ~500ms for near-real-time latency.
+    // Cycle length: ~400ms for low-latency near-real-time streaming.
     const startRecording = useCallback((mediaStream, roomId) => {
         if (!roomId) return
         roomIdRef.current = roomId
@@ -125,12 +125,12 @@ export function AudioStreamProvider({ children }) {
             rec.start()
             currentRecorder = rec
 
-            // Stop this recorder after ~500ms to produce a complete blob
+            // Stop this recorder after ~400ms to produce a complete blob
             setTimeout(() => {
                 if (rec.state === 'recording') {
                     rec.stop()
                 }
-            }, 500)
+            }, 400)
         }
 
         recordOneCycle()
