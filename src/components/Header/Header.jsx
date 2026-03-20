@@ -63,9 +63,9 @@ function Header() {
                   <p className="about-text">✦ Real-time synchronized playback across devices</p>
                   <p className="about-text">✦ Room-based multi-device connectivity</p>
                   <p className="about-text">✦ QR code &amp; join-code instant access</p>
-                  <p className="about-text">✦ Audio &amp; video file upload &amp; sharing</p>
+                  <p className="about-text">✦ Ultra-low latency WebRTC audio streaming</p>
                   <p className="about-text">✦ Floating live control widget across tabs</p>
-                  <p className="about-text">✦ Master/slave architecture with creator controls</p>
+                  <p className="about-text">✦ Creator/listener architecture with room controls</p>
                 </div>
 
                 <div className="about-divider" />
@@ -76,22 +76,14 @@ function Header() {
                   <p className="about-credit-role">Full-Stack Developer &amp; Creator</p>
                 </div>
 
-                {/* <div className="about-section">
-                  <h3 className="about-heading">Certifications &amp; Skills</h3>
-                  <p className="about-text">🎓 React.js &amp; Modern JavaScript</p>
-                  <p className="about-text">🎓 Web Audio API &amp; Real-Time Media</p>
-                  <p className="about-text">🎓 Cloud &amp; Serverless Architecture</p>
-                  <p className="about-text">🎓 Full-Stack Web Development</p>
-                </div> */}
-
                 <div className="about-divider" />
 
                 <div className="about-section">
                   <h3 className="about-heading">Tech Stack</h3>
-                  <p className="about-text">React · Vite · Web Audio API</p>
-                  <p className="about-text">MediaRecorder · getDisplayMedia</p>
-                  <p className="about-text">Upstash Redis · BroadcastChannel</p>
-                  <p className="about-text">MediaSource Extensions · WebM/Opus</p>
+                  <p className="about-text">React · Vite · WebRTC</p>
+                  <p className="about-text">LiveKit SFU · Opus Codec</p>
+                  <p className="about-text">WebSocket Signaling · getDisplayMedia</p>
+                  <p className="about-text">Node.js · livekit-server-sdk</p>
                 </div>
 
                 <div className="about-divider" />

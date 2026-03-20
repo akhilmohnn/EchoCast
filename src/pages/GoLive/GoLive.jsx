@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { removeParticipant, getParticipants } from '../../services/roomService'
+import { leaveRoom, removeParticipant, getParticipants, getCurrentUserId, onSignalingEvent } from '../../services/roomService'
 import { useAudioStream } from '../../context/AudioStreamContext'
 import './GoLive.css'
 
@@ -40,7 +40,7 @@ function GoLivePage() {
         if (isStreaming) {
             stopStream()
         } else {
-            await startStream(room?.roomId)
+            await startStream(room?.roomId, room?.livekitUrl, room?.livekitToken)
         }
     }
 
@@ -53,6 +53,7 @@ function GoLivePage() {
         if (!window.confirm('Close the room? All participants will be disconnected.')) return
         stopStream()
         try {
+            // Remove all participants via signaling server
             const participants = await getParticipants(room.roomId)
             await Promise.all(participants.map(p => removeParticipant(room.roomId, p)))
         } catch (err) {

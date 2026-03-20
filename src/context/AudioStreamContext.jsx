@@ -1,9 +1,26 @@
-import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react'
-import { setLiveState, getLiveState, uploadChunkAndState } from '../services/liveStreamService'
+/**
+ * AudioStreamContext.jsx
+ * -------------------------------------------------------------------
+ * Manages live audio streaming state for the creator/master.
+ *
+ * New architecture (WebRTC + LiveKit):
+ *   1. captureTabAudio() → MediaStream
+ *   2. connectToRoom()   → LiveKit Room (SFU)
+ *   3. publishAudioTrack() → audio sent to all listeners via SFU
+ *
+ * Replaced:
+ *   - MediaRecorder blob pipeline
+ *   - Redis/Upstash chunk uploads
+ *   - Base64 encoding
+ *   - BroadcastChannel popup sync
+ * -------------------------------------------------------------------
+ */
+
+import { createContext, useContext, useState, useRef, useCallback } from 'react'
+import { captureTabAudio } from '../webrtc/media'
+import { connectToRoom, publishAudioTrack, disconnectRoom } from '../webrtc/livekitClient'
 
 const AudioStreamContext = createContext(null)
-
-const BC = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('echocast_stream') : null
 
 export function AudioStreamProvider({ children }) {
     const [isStreaming, setIsStreaming] = useState(false)
@@ -11,38 +28,23 @@ export function AudioStreamProvider({ children }) {
     const [elapsed, setElapsed] = useState(0)
     const [permissionError, setPermissionError] = useState(null)
 
-    // Refs that are safe to use inside callbacks without re-renders
-    const streamRef = useRef(null)
-    const recorderRef = useRef(null)
+    // Refs for mutable state that doesn't need re-renders
+    const streamRef = useRef(null)       // MediaStream from getDisplayMedia
+    const livekitRoomRef = useRef(null)  // LiveKit Room instance
+    const localTrackRef = useRef(null)   // Published LocalAudioTrack
     const timerRef = useRef(null)
-    const seqRef = useRef(0)
     const elapsedRef = useRef(0)
-    const roomIdRef = useRef(null)
-    const popupRef = useRef(null)
     const streamingRef = useRef(false)
-    const pausedRef = useRef(false)
-
-    // ── Broadcast helpers ──────────────────────────────────────────────
-    const broadcast = useCallback((extra = {}) => {
-        if (!BC) return
-        BC.postMessage({
-            type: 'STATE_UPDATE',
-            streaming: streamingRef.current,
-            paused: pausedRef.current,
-            elapsed: elapsedRef.current,
-            ...extra,
-        })
-    }, [])
 
     // ── Timer ──────────────────────────────────────────────────────────
+
     const startTimer = useCallback(() => {
         clearInterval(timerRef.current)
         timerRef.current = setInterval(() => {
             elapsedRef.current += 1
             setElapsed(elapsedRef.current)
-            broadcast()
         }, 1000)
-    }, [broadcast])
+    }, [])
 
     const stopTimer = useCallback(() => {
         clearInterval(timerRef.current)
@@ -51,226 +53,126 @@ export function AudioStreamProvider({ children }) {
         setElapsed(0)
     }, [])
 
-    // ── Popup widget ───────────────────────────────────────────────────
-    const openPopup = useCallback(() => {
-        if (popupRef.current && !popupRef.current.closed) return
-        const w = 240, h = 310
-        const left = window.screen.width - w - 20
-        const top = window.screen.height - h - 60
-        const popup = window.open(
-            '/stream-widget.html',
-            'echocast_widget',
-            `width=${w},height=${h},left=${left},top=${top},resizable=no,scrollbars=no,toolbar=no,menubar=no,location=no,status=no,titlebar=no`
-        )
-        popupRef.current = popup
-    }, [])
+    // ── Start Streaming ────────────────────────────────────────────────
+    // Flow: capture tab audio → connect to LiveKit → publish track
 
-    const closePopup = useCallback(() => {
-        if (popupRef.current && !popupRef.current.closed) {
-            popupRef.current.close()
-        }
-        popupRef.current = null
-    }, [])
-
-    // ── MediaRecorder (streams audio chunks to Redis) ──────────────────
-    // Strategy: stop-then-restart cycle so EVERY blob is a COMPLETE,
-    // independently playable audio file (includes its own WebM header).
-    // Cycle length: ~400ms for low-latency near-real-time streaming.
-    const startRecording = useCallback((mediaStream, roomId) => {
-        if (!roomId) return
-        roomIdRef.current = roomId
-        seqRef.current = 0
-
-        const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
-            .find(m => MediaRecorder.isTypeSupported(m)) || ''
-
-        const mimeForState = mimeType.split(';')[0] || 'audio/webm'
-
-        let cycleTimer = null
-        let currentRecorder = null
-        let stopped = false
-
-        const recordOneCycle = () => {
-            if (stopped) return
-            if (mediaStream.getAudioTracks().every(t => t.readyState === 'ended')) {
-                return
-            }
-
-            const rec = new MediaRecorder(mediaStream, mimeType ? { mimeType } : {})
-
-            rec.ondataavailable = async (e) => {
-                if (!e.data || e.data.size === 0) return
-                const seq = seqRef.current++
-                try {
-                    const buf = await e.data.arrayBuffer()
-                    // Use pipeline: upload chunk + update state in ONE HTTP request
-                    await uploadChunkAndState(roomId, seq, buf, {
-                        active: true,
-                        paused: pausedRef.current,
-                        seq,
-                        mimeType: mimeForState,
-                        ts: Date.now(),
-                    })
-                } catch (err) {
-                    console.warn('[EchoCast] chunk upload error', err)
-                }
-            }
-
-            rec.onstop = () => {
-                if (!stopped) {
-                    cycleTimer = setTimeout(recordOneCycle, 10)  // minimal gap (10ms)
-                }
-            }
-
-            rec.start()
-            currentRecorder = rec
-
-            // Stop this recorder after ~400ms to produce a complete blob
-            setTimeout(() => {
-                if (rec.state === 'recording') {
-                    rec.stop()
-                }
-            }, 400)
-        }
-
-        recordOneCycle()
-
-        recorderRef.current = {
-            stop() {
-                stopped = true
-                clearTimeout(cycleTimer)
-                if (currentRecorder && currentRecorder.state === 'recording') {
-                    currentRecorder.stop()
-                }
-            }
-        }
-    }, [])
-
-    const stopRecording = useCallback(() => {
-        if (recorderRef.current && recorderRef.current.stop) {
-            recorderRef.current.stop()
-        }
-        recorderRef.current = null
-    }, [])
-
-    // ── BroadcastChannel → handle commands from popup ─────────────────
-    useEffect(() => {
-        if (!BC) return
-        const handler = (e) => {
-            const msg = e.data
-            if (msg.type === 'CMD_PAUSE') pauseStream()
-            else if (msg.type === 'CMD_RESUME') resumeStream()
-            else if (msg.type === 'CMD_STOP') stopStream()
-            else if (msg.type === 'CMD_REQUEST_STATE') broadcast()
-        }
-        BC.addEventListener('message', handler)
-        return () => BC.removeEventListener('message', handler)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-
-    // ── startStream ────────────────────────────────────────────────────
-    const startStream = useCallback(async (roomId) => {
+    const startStream = useCallback(async (roomId, livekitUrl, livekitToken) => {
         setPermissionError(null)
+
+        // Step 1: Capture tab audio
+        let mediaStream
         try {
-            const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-                video: true,   // Chrome requires video:true
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false,
-                    channelCount: 2,
-                    sampleRate: 48000,
-                },
-            })
-
-            // Drop video — we only want audio
-            mediaStream.getVideoTracks().forEach(t => t.stop())
-
-            if (mediaStream.getAudioTracks().length === 0) {
-                mediaStream.getTracks().forEach(t => t.stop())
-                setPermissionError('No audio was shared. Tick "Share tab audio" in the Chrome picker.')
-                return false
+            mediaStream = await captureTabAudio()
+        } catch (err) {
+            console.error('[AudioStream] Capture error:', err)
+            if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+                return { ok: false, error: null } // user cancelled — no error to show
             }
+            const msg = err.message || 'Could not capture browser audio.'
+            setPermissionError(msg)
+            return { ok: false, error: msg }
+        }
 
-            // Auto-stop when browser's "Stop sharing" bar is clicked
-            mediaStream.getAudioTracks().forEach(t => {
-                t.addEventListener('ended', () => stopStream())
-            })
+        // Auto-stop when browser's "Stop sharing" bar is clicked
+        mediaStream.getAudioTracks().forEach(t => {
+            t.addEventListener('ended', () => stopStream())
+        })
+        streamRef.current = mediaStream
 
-            streamRef.current = mediaStream
+        // Step 2: Connect to LiveKit room and publish
+        try {
+            const room = await connectToRoom(livekitUrl, livekitToken)
+            livekitRoomRef.current = room
+
+            const localTrack = await publishAudioTrack(room, mediaStream)
+            localTrackRef.current = localTrack
+
+            // Update state
             streamingRef.current = true
-            pausedRef.current = false
             setIsStreaming(true)
             setIsPaused(false)
-
             startTimer()
-            startRecording(mediaStream, roomId)
-            openPopup()
-            broadcast({ streaming: true, paused: false, elapsed: 0 })
-            return true
-        } catch (err) {
-            if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
-                setPermissionError(err.message || 'Could not capture browser audio.')
-            }
-            return false
-        }
-    }, [startTimer, startRecording, openPopup, broadcast])
 
-    // ── pauseStream ────────────────────────────────────────────────────
+            return { ok: true, error: null }
+        } catch (err) {
+            console.error('[AudioStream] LiveKit error:', err)
+            const msg = `LiveKit connection failed: ${err.message || 'unknown error'}. Check your LiveKit credentials.`
+            setPermissionError(msg)
+
+            // Clean up
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop())
+                streamRef.current = null
+            }
+            if (livekitRoomRef.current) {
+                await disconnectRoom(livekitRoomRef.current)
+                livekitRoomRef.current = null
+            }
+
+            return { ok: false, error: msg }
+        }
+    }, [startTimer])
+
+    // ── Pause Stream ───────────────────────────────────────────────────
+    // Mutes the published audio track (listeners hear silence)
+
     const pauseStream = useCallback(() => {
         if (!streamRef.current) return
+
+        // Mute the audio track (stops sending audio data)
         streamRef.current.getAudioTracks().forEach(t => { t.enabled = false })
-        if (recorderRef.current && recorderRef.current.state === 'recording') {
-            recorderRef.current.pause()
+
+        // Also mute in LiveKit
+        if (localTrackRef.current) {
+            localTrackRef.current.mute()
         }
-        pausedRef.current = true
+
         setIsPaused(true)
         clearInterval(timerRef.current)
-        broadcast({ paused: true })
+    }, [])
 
-        // Tell slaves we're paused
-        if (roomIdRef.current) {
-            setLiveState(roomIdRef.current, {
-                active: true, paused: true, seq: seqRef.current - 1, ts: Date.now()
-            }).catch(() => { })
-        }
-    }, [broadcast])
+    // ── Resume Stream ──────────────────────────────────────────────────
 
-    // ── resumeStream ───────────────────────────────────────────────────
     const resumeStream = useCallback(() => {
         if (!streamRef.current) return
+
+        // Unmute the audio track
         streamRef.current.getAudioTracks().forEach(t => { t.enabled = true })
-        if (recorderRef.current && recorderRef.current.state === 'paused') {
-            recorderRef.current.resume()
+
+        // Unmute in LiveKit
+        if (localTrackRef.current) {
+            localTrackRef.current.unmute()
         }
-        pausedRef.current = false
+
         setIsPaused(false)
         startTimer()
-        broadcast({ paused: false })
-    }, [startTimer, broadcast])
+    }, [startTimer])
 
-    // ── stopStream ────────────────────────────────────────────────────
-    const stopStream = useCallback(() => {
-        stopRecording()
+    // ── Stop Stream ────────────────────────────────────────────────────
+    // Full cleanup: unpublish track, disconnect LiveKit, stop MediaStream
+
+    const stopStream = useCallback(async () => {
+        // Stop and clean up local track
+        localTrackRef.current = null
+
+        // Disconnect from LiveKit room
+        if (livekitRoomRef.current) {
+            await disconnectRoom(livekitRoomRef.current)
+            livekitRoomRef.current = null
+        }
+
+        // Stop the MediaStream
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(t => t.stop())
             streamRef.current = null
         }
 
-        if (roomIdRef.current) {
-            setLiveState(roomIdRef.current, {
-                active: false, paused: false, seq: seqRef.current - 1, ts: Date.now()
-            }).catch(() => { })
-        }
-
+        // Reset state
         streamingRef.current = false
-        pausedRef.current = false
         setIsStreaming(false)
         setIsPaused(false)
         stopTimer()
-        closePopup()
-        broadcast({ streaming: false, paused: false, elapsed: 0 })
-    }, [stopRecording, stopTimer, closePopup, broadcast])
+    }, [stopTimer])
 
     return (
         <AudioStreamContext.Provider value={{

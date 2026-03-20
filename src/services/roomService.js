@@ -1,72 +1,36 @@
+/**
+ * roomService.js
+ * -------------------------------------------------------------------
+ * Room management via WebSocket signaling server.
+ * Replaces the old Redis/Upstash HTTP API.
+ *
+ * The signaling server handles:
+ *   - Room creation / joining / leaving
+ *   - Participant tracking (real-time via WS)
+ *   - LiveKit token generation
+ *
+ * This module manages a persistent WebSocket connection and exposes
+ * a Promise-based API to the rest of the app.
+ * -------------------------------------------------------------------
+ */
+
 import QRCode from 'qrcode'
 
-const REDIS_URL = import.meta.env.VITE_REDIS_REST_URL
-const REDIS_TOKEN = import.meta.env.VITE_REDIS_REST_TOKEN
-const ROOM_TTL_SECONDS = 1500 // 25 minutes
-const ROOM_KEY_PREFIX = 'room:'
-const PARTICIPANTS_KEY_PREFIX = 'room:participants:'
-const AUDIO_STATE_KEY_PREFIX = 'room:audio:'
-const AUDIO_DATA_KEY_PREFIX = 'room:audio:data:'
-const CHUNK_SIZE = 500 * 1024 // 500KB
-
-function ensureRedisConfig() {
-  if (!REDIS_URL || !REDIS_TOKEN) {
-    throw new Error('Missing Redis configuration. Set VITE_REDIS_REST_URL and VITE_REDIS_REST_TOKEN.')
+// Build the signaling WebSocket URL dynamically from the current page location
+// This ensures it goes through Vite's proxy (same origin) and avoids mixed content
+function getSignalingUrl() {
+  // If a full URL is provided (e.g., for production), use it directly
+  const envUrl = import.meta.env.VITE_SIGNALING_URL
+  if (envUrl && (envUrl.startsWith('ws://') || envUrl.startsWith('wss://'))) {
+    return envUrl
   }
+  // Otherwise, build from current page location + path
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const path = import.meta.env.VITE_SIGNALING_PATH || '/ws'
+  return `${proto}//${window.location.host}${path}`
 }
 
-function getRedisBaseUrl() {
-  ensureRedisConfig()
-  return REDIS_URL.replace(/\/$/, '')
-}
-
-function generateRoomId() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID()
-  }
-  return `room-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function generateRoomCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
-function getRoomKey(roomId) {
-  return encodeURIComponent(`${ROOM_KEY_PREFIX}${roomId}`)
-}
-
-function getParticipantsKey(roomId) {
-  return encodeURIComponent(`${PARTICIPANTS_KEY_PREFIX}${roomId}`)
-}
-
-function getAudioStateKey(roomId) {
-  return encodeURIComponent(`${AUDIO_STATE_KEY_PREFIX}${roomId}`)
-}
-
-function getAudioDataKey(roomId) {
-  return encodeURIComponent(`${AUDIO_DATA_KEY_PREFIX}${roomId}`)
-}
-
-async function persistRoom(roomId, roomCode, creatorId) {
-  ensureRedisConfig()
-  const payload = encodeURIComponent(
-    JSON.stringify({ roomId, roomCode, creatorId, createdAt: Date.now() })
-  )
-  const baseUrl = getRedisBaseUrl()
-  const url = `${baseUrl}/setex/${getRoomKey(roomId)}/${ROOM_TTL_SECONDS}/${payload}`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${REDIS_TOKEN}`,
-    },
-  })
-
-  if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`Failed to persist room to Redis: ${response.status} ${body}`)
-  }
-}
+// ── Client ID (persisted per session) ───────────────────────────────
 
 function getClientId() {
   const key = 'echocast_client_id'
@@ -82,302 +46,280 @@ export function getCurrentUserId() {
   return getClientId()
 }
 
-async function addParticipant(roomId, user) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const key = getParticipantsKey(roomId)
-  const payload = encodeURIComponent(JSON.stringify(user))
-  const url = `${baseUrl}/rpush/${key}/${payload}`
+// ── WebSocket Connection ────────────────────────────────────────────
 
-  await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-  })
-}
+let ws = null
+let wsReady = false
+const pendingRequests = new Map()  // type → { resolve, reject, timeout }
+const eventListeners = new Map()   // eventType → Set<callback>
+let reconnectTimer = null
+let currentRoomId = null
 
-export async function removeParticipant(roomId, user) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const key = getParticipantsKey(roomId)
-  const payload = encodeURIComponent(JSON.stringify(user))
-  // Count 0 means remove all occurrences of this value
-  const url = `${baseUrl}/lrem/${key}/0/${payload}`
+/**
+ * Ensure the WebSocket is connected.
+ * Returns a promise that resolves when the connection is open.
+ */
+function ensureConnection() {
+  return new Promise((resolve, reject) => {
+    if (ws && wsReady) {
+      resolve()
+      return
+    }
 
-  await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-  })
-}
+    // Clean up existing connection
+    if (ws) {
+      try { ws.close() } catch { /* ignore */ }
+    }
 
-export async function getParticipants(roomId) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const url = `${baseUrl}/lrange/${getParticipantsKey(roomId)}/0/-1`
+    const signalingUrl = getSignalingUrl()
+    ws = new WebSocket(signalingUrl)
 
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-  })
+    ws.onopen = () => {
+      wsReady = true
+      console.log('[Signaling] Connected to', signalingUrl)
+      resolve()
+    }
 
-  // if (!response.ok) return []
-  if (!response.ok) {
-    throw new Error(`Failed to fetch participants: ${response.status}`)
-  }
+    ws.onerror = (err) => {
+      console.error('[Signaling] WebSocket error:', err)
+      wsReady = false
+      reject(new Error('Could not connect to signaling server'))
+    }
 
-  const json = await response.json()
-  const rawList = json?.result || []
+    ws.onclose = () => {
+      wsReady = false
+      console.log('[Signaling] Disconnected')
 
-  // Parse JSON strings back to objects
-  return rawList.map(item => {
-    try {
-      return JSON.parse(item)
-    } catch (e) {
-      return { id: 'unknown', name: item } // Fallback for old string-only data
+      // Auto-reconnect after 3 seconds if we were in a room
+      if (currentRoomId && !reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          ensureConnection().catch(() => { })
+        }, 3000)
+      }
+    }
+
+    ws.onmessage = (event) => {
+      let msg
+      try {
+        msg = JSON.parse(event.data)
+      } catch {
+        return
+      }
+
+      // Handle error responses from the server — match to pending request
+      if (msg.type === 'error' && msg.requestType) {
+        // Server errors include requestType (e.g., 'create_room', 'join_room')
+        // Map server action types to expected response types
+        const requestToResponse = {
+          'create_room': 'room_created',
+          'join_room': 'room_joined',
+          'get_participants': 'participants_list',
+        }
+        const expectedResponse = requestToResponse[msg.requestType]
+        if (expectedResponse && pendingRequests.has(expectedResponse)) {
+          const { reject: rej, timeout } = pendingRequests.get(expectedResponse)
+          clearTimeout(timeout)
+          pendingRequests.delete(expectedResponse)
+          rej(new Error(msg.error || 'Server error'))
+          return
+        }
+      }
+
+      // Check if there's a pending request for this message type
+      const responseType = msg.type
+      if (pendingRequests.has(responseType)) {
+        const { resolve: res, timeout } = pendingRequests.get(responseType)
+        clearTimeout(timeout)
+        pendingRequests.delete(responseType)
+        res(msg)
+        return
+      }
+
+      // Otherwise, dispatch to event listeners
+      const listeners = eventListeners.get(responseType)
+      if (listeners) {
+        for (const cb of listeners) {
+          try { cb(msg) } catch (err) {
+            console.error('[Signaling] Event handler error:', err)
+          }
+        }
+      }
     }
   })
 }
 
+/**
+ * Send a message and wait for a specific response type.
+ */
+async function sendAndWait(msg, responseType, timeoutMs = 10000) {
+  await ensureConnection()
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(responseType)
+      reject(new Error(`Signaling timeout waiting for ${responseType}`))
+    }, timeoutMs)
+
+    pendingRequests.set(responseType, { resolve, reject, timeout })
+    ws.send(JSON.stringify(msg))
+  })
+}
+
+/**
+ * Send a message without waiting for a response.
+ */
+async function sendMessage(msg) {
+  await ensureConnection()
+  ws.send(JSON.stringify(msg))
+}
+
+// ── Event Subscription ──────────────────────────────────────────────
+
+/**
+ * Subscribe to signaling server events.
+ * @param {string} eventType - Message type to listen for
+ * @param {Function} callback - Handler function
+ * @returns {Function} Unsubscribe function
+ */
+export function onSignalingEvent(eventType, callback) {
+  if (!eventListeners.has(eventType)) {
+    eventListeners.set(eventType, new Set())
+  }
+  eventListeners.get(eventType).add(callback)
+
+  return () => {
+    const set = eventListeners.get(eventType)
+    if (set) set.delete(callback)
+  }
+}
+
+// ── Room API ────────────────────────────────────────────────────────
+
+/**
+ * Create a new room.
+ * @param {string} [userName] - Creator's display name
+ * @returns {Promise<Object>} Room info with LiveKit token
+ */
 export async function createRoom(userName) {
-  const roomId = generateRoomId()
-  const roomCode = generateRoomCode()
-  const creatorId = getClientId()
+  const userId = getClientId()
 
-  await persistRoom(roomId, roomCode, creatorId)
+  const response = await sendAndWait(
+    { type: 'create_room', userId, userName: userName || 'Admin' },
+    'room_created'
+  )
 
-  const user = { id: creatorId, name: userName || 'Admin' }
-  await addParticipant(roomId, user)
+  if (response.error) throw new Error(response.error)
 
-  const joinUrl = `${window.location.origin}/join?room=${roomId}&code=${roomCode}`
+  currentRoomId = response.roomId
+
+  // Generate QR code and join URL
+  const joinUrl = `${window.location.origin}/join?room=${response.roomId}&code=${response.roomCode}`
   const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1 })
 
-  return { roomId, roomCode, joinUrl, qrDataUrl, creatorId, isCreator: true }
-}
-
-async function fetchRoom(roomId) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const url = `${baseUrl}/get/${getRoomKey(roomId)}`
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${REDIS_TOKEN}`,
-    },
-  })
-
-  if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`Failed to fetch room: ${response.status} ${body}`)
-  }
-
-  const json = await response.json()
-  // Upstash REST API returns { result: <value> }
-  const raw = json?.result
-  if (!raw || raw === 'null' || raw === null) return null
-
-  // The stored value was URL-encoded JSON; decode and parse.
-  try {
-    const decoded = decodeURIComponent(raw)
-    const parsed = JSON.parse(decoded)
-    console.debug('Fetched room record:', parsed)
-    return parsed
-  } catch (err) {
-    console.error('Failed to parse room data:', err, raw)
-    throw new Error('Room data corrupted or unreadable.')
+  return {
+    roomId: response.roomId,
+    roomCode: response.roomCode,
+    creatorId: response.creatorId,
+    isCreator: true,
+    joinUrl,
+    qrDataUrl,
+    livekitToken: response.livekitToken,
+    livekitUrl: response.livekitUrl,
   }
 }
 
+/**
+ * Join an existing room.
+ * @param {string} roomId
+ * @param {string} roomCode
+ * @param {string} [userName]
+ * @returns {Promise<Object>} Room info with LiveKit token
+ */
 export async function joinRoom(roomId, roomCode, userName) {
+  const userId = getClientId()
   const normalizedRoomId = roomId?.trim()
-  const normalizedRoomCode =
-    typeof roomCode === 'string' || typeof roomCode === 'number'
-      ? String(roomCode).trim()
-      : ''
+  const normalizedRoomCode = String(roomCode || '').trim()
 
   if (!normalizedRoomId || !normalizedRoomCode) {
     throw new Error('Room ID and code are required.')
   }
 
-  const record = await fetchRoom(normalizedRoomId)
-  if (!record) {
-    throw new Error('Room not found or expired.')
-  }
+  const response = await sendAndWait(
+    {
+      type: 'join_room',
+      roomId: normalizedRoomId,
+      roomCode: normalizedRoomCode,
+      userId,
+      userName: userName || `User-${userId.slice(-4)}`,
+    },
+    'room_joined'
+  )
 
-  const storedCode = record.roomCode ? String(record.roomCode).trim() : ''
-  if (!storedCode || storedCode !== normalizedRoomCode) {
-    // Surfacing minimal debug info in console for troubleshooting code mismatches.
-    console.debug('Room code mismatch', {
-      normalizedRoomId,
-      providedCode: normalizedRoomCode,
-      storedCode,
-    })
-    throw new Error('Invalid room code. Double-check the 6-digit code and try again.')
-  }
+  if (response.error) throw new Error(response.error)
 
-  const userId = getClientId()
-  const user = { id: userId, name: userName || `User-${userId.slice(-4)}` }
+  currentRoomId = normalizedRoomId
 
-  // Check if already in participants to avoid duplicates (optional, but good)
-  // For now just add, the UI dedupes. Can improve later.
-  await addParticipant(normalizedRoomId, user)
-
+  // Generate QR code and join URL
   const joinUrl = `${window.location.origin}/join?room=${normalizedRoomId}&code=${normalizedRoomCode}`
   const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1 })
 
   return {
-    roomId: normalizedRoomId,
-    roomCode: normalizedRoomCode,
+    roomId: response.roomId,
+    roomCode: response.roomCode,
+    creatorId: response.creatorId,
+    isCreator: response.isCreator,
     joinUrl,
     qrDataUrl,
-    creatorId: record.creatorId,
-    isCreator: record.creatorId === userId
+    livekitToken: response.livekitToken,
+    livekitUrl: response.livekitUrl,
   }
-}
-
-export async function updateAudioState(roomId, state) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const key = getAudioStateKey(roomId)
-  const payload = encodeURIComponent(JSON.stringify(state))
-
-  // Set audio state with same expiry as room (roughly)
-  const url = `${baseUrl}/setex/${key}/${ROOM_TTL_SECONDS}/${payload}`
-
-  await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-  })
-}
-
-export async function getAudioState(roomId) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const key = getAudioStateKey(roomId)
-  const url = `${baseUrl}/get/${key}`
-
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-  })
-
-  if (!response.ok) return null
-
-  const json = await response.json()
-  const raw = json?.result
-  if (!raw || raw === 'null') return null
-
-  try {
-    return JSON.parse(decodeURIComponent(raw))
-  } catch (err) {
-    console.error('Failed to parse audio state', err)
-    return null
-  }
-}
-
-export async function uploadAudioChunked(roomId, fileDataUrl) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const keyBase = getAudioDataKey(roomId)
-
-  // Calculate chunks
-  const totalLength = fileDataUrl.length
-  const totalChunks = Math.ceil(totalLength / CHUNK_SIZE)
-
-  // Upload chunks in parallel
-  const promises = []
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE
-    const end = Math.min(start + CHUNK_SIZE, totalLength)
-    const chunk = fileDataUrl.substring(start, end)
-
-    const key = `${keyBase}:${i}`
-    const payload = encodeURIComponent(chunk)
-    // Use SETEX to expire same as room
-    const url = `${baseUrl}/setex/${key}/${ROOM_TTL_SECONDS}/${payload}`
-
-    promises.push(fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-    }))
-  }
-
-  await Promise.all(promises)
-
-  // Store meta about data so we know how many chunks to fetch
-  const metaKey = `${keyBase}:meta`
-  const metaPayload = encodeURIComponent(JSON.stringify({ totalChunks, totalLength }))
-  await fetch(`${baseUrl}/setex/${metaKey}/${ROOM_TTL_SECONDS}/${metaPayload}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-  })
-}
-
-export async function downloadAudioChunked(roomId) {
-  ensureRedisConfig()
-  const baseUrl = getRedisBaseUrl()
-  const keyBase = getAudioDataKey(roomId)
-
-  // Get Meta
-  const metaKey = `${keyBase}:meta`
-  const metaRes = await fetch(`${baseUrl}/get/${metaKey}`, {
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-  })
-  if (!metaRes.ok) return null
-  const metaJson = await metaRes.json()
-  if (!metaJson.result) return null
-
-  let meta
-  try {
-    meta = JSON.parse(decodeURIComponent(metaJson.result))
-  } catch (e) {
-    return null
-  }
-
-  const { totalChunks } = meta
-
-  // Fetch all chunks
-  const promises = []
-  for (let i = 0; i < totalChunks; i++) {
-    const key = `${keyBase}:${i}`
-    promises.push(fetch(`${baseUrl}/get/${key}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-    }).then(r => r.json()))
-  }
-
-  const results = await Promise.all(promises)
-
-  // Reassemble
-  let fullDataUrl = ''
-  for (const res of results) {
-    if (res.result) {
-      fullDataUrl += decodeURIComponent(res.result)
-    }
-  }
-
-  return fullDataUrl
 }
 
 /**
- * Download chunked audio and return a Blob URL instead of a DataURL.
- * Blob URLs are far more memory-efficient — the browser manages the blob
- * in native memory rather than keeping a multi-MB string on the JS heap.
+ * Leave the current room.
  */
-export async function downloadAudioAsBlobUrl(roomId) {
-  const dataUrl = await downloadAudioChunked(roomId)
-  if (!dataUrl) return null
-
-  // Parse the data URL: data:[<mediatype>][;base64],<data>
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s)
-  if (!match) return dataUrl // fallback if format is unexpected
-
-  const mimeType = match[1]
-  const b64Data = match[2]
-
-  // Decode base64 → binary in chunks to avoid call-stack overflow
-  const binaryStr = atob(b64Data)
-  const len = binaryStr.length
-  const bytes = new Uint8Array(len)
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryStr.charCodeAt(i)
+export async function leaveRoom(roomId, userId) {
+  currentRoomId = null
+  try {
+    await sendMessage({ type: 'leave_room', roomId, userId })
+  } catch {
+    // Best-effort — connection may already be closed
   }
+}
 
-  const blob = new Blob([bytes.buffer], { type: mimeType })
-  return URL.createObjectURL(blob)
+/**
+ * Remove a participant from a room (creator only).
+ */
+export async function removeParticipant(roomId, user) {
+  await sendMessage({
+    type: 'remove_participant',
+    roomId,
+    targetUserId: typeof user === 'string' ? user : user.id,
+  })
+}
+
+/**
+ * Request the current participant list.
+ */
+export async function getParticipants(roomId) {
+  const response = await sendAndWait(
+    { type: 'get_participants', roomId },
+    'participants_list'
+  )
+  return response.participants || []
+}
+
+/**
+ * Disconnect the signaling WebSocket entirely.
+ */
+export function disconnectSignaling() {
+  clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  currentRoomId = null
+  if (ws) {
+    try { ws.close() } catch { /* ignore */ }
+    ws = null
+    wsReady = false
+  }
 }

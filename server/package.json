@@ -1,0 +1,17 @@
+{
+    "name": "echocast-signaling",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "EchoCast WebSocket signaling server with LiveKit token generation",
+    "main": "signaling.js",
+    "scripts": {
+        "start": "node signaling.js",
+        "dev": "node --watch signaling.js"
+    },
+    "dependencies": {
+        "dotenv": "^16.4.7",
+        "livekit-server-sdk": "^2.9.1",
+        "uuid": "^11.1.0",
+        "ws": "^8.18.0"
+    }
+}
