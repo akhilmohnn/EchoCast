@@ -13,6 +13,7 @@
  */
 
 import 'dotenv/config'
+import http from 'node:http'
 import { WebSocketServer } from 'ws'
 import { AccessToken } from 'livekit-server-sdk'
 import {
@@ -32,9 +33,27 @@ if (!LK_API_KEY || !LK_API_SECRET) {
     console.warn('⚠️  LIVEKIT_API_KEY / LIVEKIT_API_SECRET not set — token generation will fail.')
 }
 
-// ── WebSocket Server ────────────────────────────────────────────────
+// ── HTTP Server (health-check for Render / Railway / etc.) ──────────
 
-const wss = new WebSocketServer({ port: PORT })
+const httpServer = http.createServer((req, res) => {
+    // CORS preflight for browsers that probe the origin
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204)
+        return res.end()
+    }
+
+    // Health-check endpoint
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ status: 'ok', service: 'echocast-signaling' }))
+})
+
+// ── WebSocket Server (attached to the HTTP server) ──────────────────
+
+const wss = new WebSocketServer({ server: httpServer })
 
 /** @type {Map<WebSocket, { userId: string, roomId: string | null }>} */
 const clients = new Map()
@@ -42,8 +61,8 @@ const clients = new Map()
 /** @type {Map<string, Set<WebSocket>>}  roomId → connected sockets */
 const roomSockets = new Map()
 
-wss.on('listening', () => {
-    console.log(`✅ EchoCast signaling server running on ws://localhost:${PORT}`)
+httpServer.listen(PORT, () => {
+    console.log(`✅ EchoCast signaling server running on port ${PORT}`)
 })
 
 wss.on('connection', (ws) => {
