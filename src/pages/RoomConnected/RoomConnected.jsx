@@ -528,13 +528,13 @@ function SpatialAudioMap({ participants, roomId, currentUserId }) {
         style={{ 
           width: 300, 
           height: 300, 
-          background: 'radial-gradient(circle at center, #1f2937 0%, #111827 100%)', 
+          background: 'radial-gradient(circle at center, #2a2a2a 0%, #050505 100%)', 
           borderRadius: '50%', 
           margin: '0 auto', 
           position: 'relative',
           touchAction: 'none',
-          border: '2px solid rgba(59,130,246,0.3)',
-          boxShadow: 'inset 0 0 40px rgba(0,0,0,0.5)',
+          border: '2px solid rgba(255,255,255,0.2)',
+          boxShadow: 'inset 0 0 40px rgba(0,0,0,0.8)',
           cursor: 'grab'
         }}
         onPointerDown={handlePointerDown}
@@ -562,15 +562,16 @@ function SpatialAudioMap({ participants, roomId, currentUserId }) {
                 width: 32,
                 height: 32,
                 borderRadius: '50%',
-                background: `hsl(${Math.abs((user?.name || user?.id || '?').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % 360}, 70%, 50%)`,
-                color: '#fff',
+                background: '#333333',
+                border: '1px solid #777777',
+                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '14px',
                 fontWeight: 'bold',
                 pointerEvents: 'none',
-                boxShadow: `0 0 ${15 * vol}px rgba(255,255,255,${vol * 0.6})`,
+                boxShadow: `0 0 ${15 * vol}px rgba(255,255,255,${vol * 0.4})`,
                 transition: 'transform 0.1s ease-out, box-shadow 0.1s ease-out',
                 zIndex: 1
               }}
@@ -591,8 +592,8 @@ function SpatialAudioMap({ participants, roomId, currentUserId }) {
             width: 24,
             height: 24,
             borderRadius: '50%',
-            background: '#60a5fa',
-            boxShadow: '0 0 20px 4px rgba(96,165,250,0.6)',
+            background: '#ffffff',
+            boxShadow: '0 0 20px 4px rgba(255,255,255,0.6)',
             pointerEvents: 'none',
             zIndex: 10
           }}
