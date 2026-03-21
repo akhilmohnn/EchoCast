@@ -1,47 +1,64 @@
-A web-based live audio relay system for browser video playback. Stream synchronized audio from your computer to other devices via simple room codes.
+# 🎙️ EchoCast
 
-✨ Features
-Live Relay: Synchronized audio streaming.
+A web-based live audio relay system. Effortlessly broadcast synchronized audio from your computer to other devices via simple room codes and a real-time WebRTC infrastructure.
 
-Easy Access: Room creation with QR code support.
+---
 
-Optimized: Chunked upload functionality for stability.
+## ✨ Features
 
-Vite Powered: Fast HMR and network-exposed dev server.
+- **Live Audio Relay:** Ultra-low latency, synchronized audio streaming using LiveKit.
+- **Easy Access:** Join rooms via a 4-digit code or quickly scan a QR code.
+- **Robust Infrastructure:** Decoupled frontend (Vite/React) and signaling backend (Node/WebSocket).
+- **Fast Development:** Scaffolded with Vite for lightning-fast HMR.
 
-🚀 Quick Start
-Bash
+---
 
-# Install dependencies
+## 🚀 Local Development setup
+
+The project is split into two parts: the Vite frontend and a tiny Node.js WebSocket signaling server. **You must run both locally.**
+
+### 1. Start the Signaling Server (Terminal 1)
+```bash
+cd server
 npm install
-
-# Start development server
 npm run dev
-🛠️ Stack
-Core: React + Vite
+# The WebSocket server will start on ws://localhost:3001
+```
 
-Deployment: Vercel
+### 2. Start the Frontend (Terminal 2)
+```bash
+# In the root project folder
+npm install
+npm run dev
+# The Vite app will start on https://localhost:5173
+```
+*Note: Vite acts as a proxy, automatically routing `/ws` requests to port `3001`.*
 
-Language: JavaScript (ESLint configured)
+---
 
-🌐 Live Demo
-Visit echo-cast.vercel.app
+## 🌍 Production Deployment
 
-# React + Vite
+Because Vercel (where the frontend lives) uses Serverless Functions, it **kills long-running Server connections**. Therefore, you cannot host your WebSocket `signaling.js` server on Vercel. 
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+You must deploy the Backend and Frontend separately:
 
-Currently, two official plugins are available:
+### Step 1: Deploy Backend to Render (or similar)
+1. Go to your Render Dashboard and create a new **Web Service**.
+2. Set the **Root Directory** to: `server`
+3. Set **Build Command** to: `npm install`
+4. Set **Start Command** to: `npm start`
+5. Go to **Environment Variables** and add your LiveKit credentials:
+   - `LIVEKIT_URL`
+   - `LIVEKIT_API_KEY`
+   - `LIVEKIT_API_SECRET`
+6. Click **Deploy**. Render will generate a URL for you like `https://echocast-signaling.onrender.com`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Step 2: Deploy Frontend to Vercel
+1. Import your main GitHub repository into Vercel.
+2. In the Vercel project Settings, go to **Environment Variables**.
+3. Add the following variable so your app knows where the Render signaling server is:
+   - **Name**: `VITE_SIGNALING_URL`
+   - **Value**: `wss://your-render-app-url.onrender.com` *(Replace with your actual Render URL, but use `wss://` instead of `https://`)*
+4. Click **Deploy**.
 
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+> 🎉 **Done!** Your Vercel frontend will now correctly route all real-time WebRTC room coordination to your persistent Render backend.
