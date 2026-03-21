@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Header, Button, Footer } from '../../components'
 import {
@@ -8,6 +8,7 @@ import {
   leaveRoom,
   onSignalingEvent,
   toggleParticipantMute,
+  updateSpatialVolumes,
 } from '../../services/roomService'
 import { useAudioStream } from '../../context/AudioStreamContext'
 import { useLivekitListener } from '../../hooks/useLivekitListener'
@@ -24,9 +25,11 @@ function RoomConnectedPage() {
   const [mutedParticipants, setMutedParticipants] = useState(new Set())
   const [currentUserId, setCurrentUserId] = useState('')
   const [participantAudioEnabled, setParticipantAudioEnabled] = useState(false)
+  const [spatialVolume, setSpatialVolume] = useState(1.0)
   const [goLiveLoading, setGoLiveLoading] = useState(false)
   const [goLiveError, setGoLiveError] = useState('')
   const [showParticipantsList, setShowParticipantsList] = useState(false)
+  const [showSpatialMap, setShowSpatialMap] = useState(false)
 
   const { isStreaming, startStream, stopStream } = useAudioStream()
 
@@ -36,7 +39,8 @@ function RoomConnectedPage() {
   useLivekitListener(
     isSlaveReady ? room?.livekitUrl : null,
     isSlaveReady ? room?.livekitToken : null,
-    participantAudioEnabled
+    participantAudioEnabled,
+    spatialVolume
   )
 
   useEffect(() => {
@@ -86,12 +90,19 @@ function RoomConnectedPage() {
       setParticipantAudioEnabled(!msg.mute)
     })
 
+    const unsub6 = onSignalingEvent('admin_set_volume', (msg) => {
+      if (typeof msg.volume === 'number') {
+        setSpatialVolume(msg.volume)
+      }
+    })
+
     return () => {
       unsub1()
       unsub2()
       unsub3()
       unsub4()
       unsub5()
+      unsub6()
     }
   }, [room?.roomId, navigate])
 
@@ -193,10 +204,30 @@ function RoomConnectedPage() {
                 </section>
 
                 <aside className="participants-panel">
-                  <div className="participants-title">
-                    <span>Connections</span>
-                    <span className="participants-count">{participants.length}</span>
+                  <div className="participants-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Connections</span>
+                      <span className="participants-count">{participants.length}</span>
+                    </div>
+                    <button 
+                      onClick={() => setShowSpatialMap(!showSpatialMap)}
+                      title="Spatial Audio Mixer"
+                      style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                        fontSize: '1.5rem', animation: showSpatialMap ? 'pulse 2s infinite' : 'none',
+                        transform: showSpatialMap ? 'scale(1.1)' : 'scale(1)', 
+                        transition: 'all 0.2s', filter: showSpatialMap ? 'drop-shadow(0 0 8px rgba(59,130,246,0.6))' : 'none'
+                      }}>
+                      🌐
+                    </button>
                   </div>
+                  {showSpatialMap && (
+                    <SpatialAudioMap 
+                      participants={participants} 
+                      roomId={room.roomId} 
+                      currentUserId={currentUserId} 
+                    />
+                  )}
                   <ul className="participants-list">
                     {participants.map((user, idx) => (
                       <li key={`${user.id}-${idx}`} className="participant-item">
@@ -282,7 +313,7 @@ function RoomConnectedPage() {
                 </div>
 
                 {/* ── The Big Audio Orb ── */}
-                <div className={`audio-orb-wrapper${participantAudioEnabled ? ' audio-orb-wrapper--active' : ''}`}>
+                <div className={`audio-orb-wrapper${participantAudioEnabled ? ' audio-orb-wrapper--active' : ''}`} style={{ opacity: participantAudioEnabled ? 0.3 + (spatialVolume * 0.7) : 1, transform: participantAudioEnabled ? `scale(${0.8 + (spatialVolume * 0.2)})` : 'scale(1)' }}>
                   <div className="audio-orb-ring audio-orb-ring--3" />
                   <div className="audio-orb-ring audio-orb-ring--2" />
                   <div className="audio-orb-ring audio-orb-ring--1" />
@@ -415,3 +446,161 @@ function RoomConnectedPage() {
 }
 
 export default RoomConnectedPage
+
+function SpatialAudioMap({ participants, roomId, currentUserId }) {
+  const containerRef = useRef(null)
+  const listeners = participants.filter(p => p.id !== currentUserId)
+  
+  const radius = 100
+  const center = 150
+  
+  const listenerCoords = useMemo(() => {
+    const coords = {}
+    listeners.forEach((p, i) => {
+      const angle = (i / listeners.length) * 2 * Math.PI
+      coords[p.id] = {
+        x: center + radius * Math.cos(angle),
+        y: center + radius * Math.sin(angle)
+      }
+    })
+    return coords
+  }, [listeners])
+
+  const [dotPos, setDotPos] = useState({ x: center, y: center })
+  const isDragging = useRef(false)
+  const lastUpdateRef = useRef(0)
+
+  const handlePointerDown = (e) => {
+    isDragging.current = true
+    updatePos(e)
+    e.target.setPointerCapture(e.pointerId)
+  }
+
+  const handlePointerMove = (e) => {
+    if (!isDragging.current) return
+    updatePos(e)
+  }
+
+  const handlePointerUp = (e) => {
+    isDragging.current = false
+    e.target.releasePointerCapture(e.pointerId)
+  }
+
+  const updatePos = (e) => {
+    if (!containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    let x = e.clientX - rect.left
+    let y = e.clientY - rect.top
+    
+    x = Math.max(0, Math.min(300, x))
+    y = Math.max(0, Math.min(300, y))
+    setDotPos({ x, y })
+
+    const now = Date.now()
+    if (now - lastUpdateRef.current > 100) {
+      calculateAndSendVolumes(x, y)
+      lastUpdateRef.current = now
+    }
+  }
+
+  const calculateAndSendVolumes = (x, y) => {
+    if (listeners.length === 0) return
+    const volumes = {}
+    const MAX_DIST = 160 
+    
+    Object.entries(listenerCoords).forEach(([id, coord]) => {
+      const dist = Math.sqrt(Math.pow(x - coord.x, 2) + Math.pow(y - coord.y, 2))
+      let vol = 1.0 - (dist / MAX_DIST)
+      vol = Math.max(0.1, Math.min(1.0, vol))
+      volumes[id] = Number(vol.toFixed(2))
+    })
+
+    updateSpatialVolumes(roomId, volumes)
+  }
+
+  return (
+    <div style={{ margin: '1rem 0', background: 'rgba(31,41,55,0.8)', borderRadius: '16px', padding: '1.5rem 1rem', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h3 style={{ fontSize: '1rem', margin: 0, color: '#f3f4f6', fontWeight: '600' }}>Spatial Mixer</h3>
+      </div>
+      <div 
+        ref={containerRef}
+        style={{ 
+          width: 300, 
+          height: 300, 
+          background: 'radial-gradient(circle at center, #1f2937 0%, #111827 100%)', 
+          borderRadius: '50%', 
+          margin: '0 auto', 
+          position: 'relative',
+          touchAction: 'none',
+          border: '2px solid rgba(59,130,246,0.3)',
+          boxShadow: 'inset 0 0 40px rgba(0,0,0,0.5)',
+          cursor: 'grab'
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        {/* Center Guide */}
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+        
+        {/* Listeners */}
+        {Object.entries(listenerCoords).map(([id, coord]) => {
+          const user = listeners.find(l => l.id === id)
+          const dist = Math.sqrt(Math.pow(dotPos.x - coord.x, 2) + Math.pow(dotPos.y - coord.y, 2))
+          let vol = 1.0 - (dist / 160)
+          vol = Math.max(0.1, Math.min(1.0, vol))
+          
+          return (
+            <div 
+              key={id}
+              style={{
+                position: 'absolute',
+                left: coord.x,
+                top: coord.y,
+                transform: `translate(-50%, -50%) scale(${0.8 + (vol * 0.4)})`,
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: `hsl(${Math.abs((user?.name || user?.id || '?').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % 360}, 70%, 50%)`,
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                pointerEvents: 'none',
+                boxShadow: `0 0 ${15 * vol}px rgba(255,255,255,${vol * 0.6})`,
+                transition: 'transform 0.1s ease-out, box-shadow 0.1s ease-out',
+                zIndex: 1
+              }}
+              title={user?.name}
+            >
+              {(user?.name || '?').charAt(0).toUpperCase()}
+            </div>
+          )
+        })}
+        
+        {/* Playhead Dot */}
+        <div 
+          style={{
+            position: 'absolute',
+            left: dotPos.x,
+            top: dotPos.y,
+            transform: 'translate(-50%, -50%) scale(1)',
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            background: '#60a5fa',
+            boxShadow: '0 0 20px 4px rgba(96,165,250,0.6)',
+            pointerEvents: 'none',
+            zIndex: 10
+          }}
+        />
+      </div>
+      <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#9ca3af', marginTop: '1.5rem', marginBottom: 0 }}>
+        Drag the blue orb to mix audio spatially.
+      </p>
+    </div>
+  )
+}

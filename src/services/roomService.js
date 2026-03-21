@@ -312,6 +312,17 @@ export async function toggleParticipantMute(roomId, targetUserId, mute) {
 }
 
 /**
+ * Update volumes for multiple users spatially (creator only).
+ */
+export async function updateSpatialVolumes(roomId, volumes) {
+  sendMessage({ // Fire and forget (don't wait for response to reduce latency)
+    type: 'update_spatial_volumes',
+    roomId,
+    volumes
+  })
+}
+
+/**
  * Request the current participant list.
  */
 export async function getParticipants(roomId) {

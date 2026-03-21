@@ -287,6 +287,28 @@ async function handleMessage(ws, msg) {
             break
         }
 
+        // ── Update Spatial Volumes (creator only) ────────────────────────
+        case 'update_spatial_volumes': {
+            const { roomId, volumes } = msg
+            const meta = clients.get(ws)
+            const room = getRoom(roomId)
+
+            if (!room || !meta || room.creatorId !== meta.userId) {
+                throw new Error('Only the room creator can update spatial volumes')
+            }
+
+            const sockets = roomSockets.get(roomId)
+            if (sockets) {
+                for (const s of sockets) {
+                    const sMeta = clients.get(s)
+                    if (sMeta && sMeta.userId && volumes[sMeta.userId] !== undefined) {
+                        send(s, { type: 'admin_set_volume', volume: volumes[sMeta.userId] })
+                    }
+                }
+            }
+            break
+        }
+
         // ── Get Participants ─────────────────────────────────────────────
         case 'get_participants': {
             const { roomId } = msg

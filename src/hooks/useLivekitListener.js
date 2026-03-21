@@ -25,11 +25,21 @@ import { connectToRoom, disconnectRoom, RoomEvent, Track } from '../webrtc/livek
  * @param {string|null} livekitUrl   - LiveKit server URL (null = don't connect)
  * @param {string|null} livekitToken - Access token (null = don't connect)
  * @param {boolean} enabled          - Whether audio should play (mute/unmute)
+ * @param {number} volume            - Audio volume from 0.0 to 1.0 (default 1.0)
  */
-export function useLivekitListener(livekitUrl, livekitToken, enabled) {
+export function useLivekitListener(livekitUrl, livekitToken, enabled, volume = 1.0) {
     const roomRef = useRef(null)
     const audioElementsRef = useRef(new Map()) // trackSid → HTMLAudioElement
     const enabledRef = useRef(enabled)
+    const volumeRef = useRef(volume)
+
+    // Keep volume in sync
+    useEffect(() => {
+        volumeRef.current = volume
+        for (const audio of audioElementsRef.current.values()) {
+            audio.volume = volume
+        }
+    }, [volume])
 
     // Keep enabled ref in sync for use in callbacks
     useEffect(() => {
@@ -45,6 +55,7 @@ export function useLivekitListener(livekitUrl, livekitToken, enabled) {
     const attachTrack = useCallback((track, publication) => {
         const audioEl = track.attach()
         audioEl.muted = !enabledRef.current
+        audioEl.volume = volumeRef.current
         audioEl.autoplay = true
 
         // Append to DOM (hidden) — needed for autoplay policies
