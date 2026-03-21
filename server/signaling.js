@@ -258,6 +258,35 @@ async function handleMessage(ws, msg) {
             break
         }
 
+        // ── Toggle Participant Mute (creator only) ───────────────────────
+        case 'toggle_participant_mute': {
+            const { roomId, targetUserId, mute } = msg
+            const meta = clients.get(ws)
+            const room = getRoom(roomId)
+
+            if (!room || !meta || room.creatorId !== meta.userId) {
+                throw new Error('Only the room creator can mute or unmute participants')
+            }
+
+            const sockets = roomSockets.get(roomId)
+            if (sockets) {
+                for (const s of sockets) {
+                    const sMeta = clients.get(s)
+                    if (sMeta?.userId === targetUserId) {
+                        send(s, { type: 'admin_toggled_mute', mute })
+                        break
+                    }
+                }
+            }
+
+            broadcastToRoom(roomId, {
+                type: 'participant_mute_toggled',
+                userId: targetUserId,
+                mute
+            })
+            break
+        }
+
         // ── Get Participants ─────────────────────────────────────────────
         case 'get_participants': {
             const { roomId } = msg

@@ -7,6 +7,7 @@ import {
   getCurrentUserId,
   leaveRoom,
   onSignalingEvent,
+  toggleParticipantMute,
 } from '../../services/roomService'
 import { useAudioStream } from '../../context/AudioStreamContext'
 import { useLivekitListener } from '../../hooks/useLivekitListener'
@@ -20,6 +21,7 @@ function RoomConnectedPage() {
   const navigate = useNavigate()
 
   const [participants, setParticipants] = useState([])
+  const [mutedParticipants, setMutedParticipants] = useState(new Set())
   const [currentUserId, setCurrentUserId] = useState('')
   const [participantAudioEnabled, setParticipantAudioEnabled] = useState(false)
   const [goLiveLoading, setGoLiveLoading] = useState(false)
@@ -71,10 +73,25 @@ function RoomConnectedPage() {
       navigate('/')
     })
 
+    const unsub4 = onSignalingEvent('participant_mute_toggled', (msg) => {
+      setMutedParticipants(prev => {
+        const next = new Set(prev)
+        if (msg.mute) next.add(msg.userId)
+        else next.delete(msg.userId)
+        return next
+      })
+    })
+
+    const unsub5 = onSignalingEvent('admin_toggled_mute', (msg) => {
+      setParticipantAudioEnabled(!msg.mute)
+    })
+
     return () => {
       unsub1()
       unsub2()
       unsub3()
+      unsub4()
+      unsub5()
     }
   }, [room?.roomId, navigate])
 
@@ -207,13 +224,33 @@ function RoomConnectedPage() {
                           </span>
                         </div>
                         {user.id !== currentUserId && (
-                          <button
-                            className="remove-btn"
-                            title="Remove User"
-                            onClick={() => handleRemoveUser(user)}
-                          >
-                            &times;
-                          </button>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <button
+                              className="mute-btn"
+                              title={mutedParticipants.has(user.id) ? "Unmute User" : "Mute User"}
+                              onClick={() => toggleParticipantMute(room.roomId, user.id, !mutedParticipants.has(user.id))}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '1.2rem',
+                                color: mutedParticipants.has(user.id) ? '#ef4444' : '#9ca3af',
+                                transition: 'color 0.2s',
+                                padding: '4px',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              {mutedParticipants.has(user.id) ? '🔇' : '🔊'}
+                            </button>
+                            <button
+                              className="remove-btn"
+                              title="Remove User"
+                              onClick={() => handleRemoveUser(user)}
+                            >
+                              &times;
+                            </button>
+                          </div>
                         )}
                       </li>
                     ))}

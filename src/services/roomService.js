@@ -300,6 +300,18 @@ export async function removeParticipant(roomId, user) {
 }
 
 /**
+ * Mute or unmute a participant (creator only).
+ */
+export async function toggleParticipantMute(roomId, targetUserId, mute) {
+  await sendMessage({
+    type: 'toggle_participant_mute',
+    roomId,
+    targetUserId,
+    mute
+  })
+}
+
+/**
  * Request the current participant list.
  */
 export async function getParticipants(roomId) {
